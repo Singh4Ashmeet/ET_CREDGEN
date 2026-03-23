@@ -19,15 +19,26 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" name="password" required>
+                <input type="password" name="password" id="password" required>
+            </div>
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="show-password">
+                <label for="show-password">Show Password</label>
             </div>
             <button type="submit" class="login-btn">Login</button>
         </form>
         <div class="login-hint">
             <p>Default username: <strong>admin</strong></p>
-            <p>Default password: <strong>admin123</strong></p>
+            <p>Default password: <strong>admin@123</strong></p>
         </div>
     </div>
 </div>
+
+<script>
+    document.getElementById('show-password').addEventListener('change', function() {
+        const passwordInput = document.getElementById('password');
+        passwordInput.type = this.checked ? 'text' : 'password';
+    });
+</script>
 </body>
 </html>

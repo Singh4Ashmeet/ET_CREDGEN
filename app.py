@@ -1,450 +1,241 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template, session, redirect, url_for
+import os
+import logging
+from pathlib import Path
+from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, jwt_required, get_jwt
-from flask_talisman import Talisman
+from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from dotenv import load_dotenv
-import os
-import uuid
-from datetime import datetime, timedelta
-import json
-from functools import wraps
-from werkzeug.utils import secure_filename
-from sqlalchemy.exc import SQLAlchemyError
-
-# Import database and models
 from database import db, init_db
-from models import (
-    Customer, LoanApplication, KYCRecord, ChatSession, 
-    ChatLog, TuningContent, AdminUser, RevokedToken
-)
-from auth import auth_bp
-from validators import LoanApplicationSchema, KYCSchema
+from db_models import AdminUser, RevokedToken
+from dotenv import load_dotenv
+from datetime import timedelta
 
-# Import the core agents (DO NOT TOUCH AGENT LOGIC)
-from agents.master_agent import MasterAgent, ConversationStage, IntentType
-from agents.underwriting_agent import UnderwritingAgent
-from agents.sales_agent import SalesAgent
-from agents.fraud_agent import FraudAgent
-from utils.pdf_generator import generate_sanction_letter as generate_sanction_pdf
-from models.gemini_service import GeminiService
-from models.openrouter_service import OpenRouterService
-
-# Load environment variables
 load_dotenv()
 
-# --- 1. Initialization ---
-app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def setup_database(app):
-    """Automated setup for database and admin user on startup."""
-    with app.app_context():
-        try:
-            # Create tables if they don't exist
-            db.create_all()
-            app.logger.info("Database tables verified/created.")
+# ─── APP FACTORY ──────────────────────────────────────────────────────
 
-            # Seed Admin if not exists
-            admin_user = os.getenv("SEED_ADMIN_USERNAME")
-            admin_email = os.getenv("SEED_ADMIN_EMAIL")
-            admin_password = os.getenv("SEED_ADMIN_PASSWORD")
+def create_app():
+    app = Flask(__name__, static_folder=None)
 
-            if admin_user and admin_email and admin_password:
-                exists = AdminUser.query.filter_by(username=admin_user).first()
-                if not exists:
-                    new_admin = AdminUser(
-                        username=admin_user,
-                        email=admin_email,
-                        role='admin'
-                    )
-                    new_admin.set_password(admin_password)
-                    db.session.add(new_admin)
-                    db.session.commit()
-                    app.logger.info(f"Default admin user '{admin_user}' created.")
-            else:
-                app.logger.warning("SEED_ADMIN credentials missing in .env; skipping automated seeding.")
+    # --- Configuration ---
+    app.config['SECRET_KEY'] = os.getenv('APP_SECRET_KEY', 'dev-secret-key-change-me')
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-change-me')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(
+        minutes=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 30))
+    )
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(
+        days=int(os.getenv('JWT_REFRESH_TOKEN_EXPIRES', 7))
+    )
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
 
-        except Exception as e:
-            app.logger.error(f"Database setup failed: {e}")
+    # Upload folder
+    upload_folder = os.path.join(os.path.dirname(__file__), 'uploads')
+    os.makedirs(upload_folder, exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = upload_folder
 
-# Security Hardening: Enforce APP_SECRET_KEY
-if not os.environ.get("APP_SECRET_KEY"):
-    raise RuntimeError("APP_SECRET_KEY env var is required")
-app.secret_key = os.environ.get("APP_SECRET_KEY")
+    # --- Database ---
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        db_path = os.path.join(os.path.dirname(__file__), 'credgen.db')
+        db_url = f'sqlite:///{db_path}'
+        os.environ['DATABASE_URL'] = db_url
+        logger.info(f"Using SQLite at {db_path}")
 
-# CORS configuration
-CORS(app, origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:5000").split(","),
-     supports_credentials=True)
+    init_db(app)
 
-# Security Headers with Talisman
-Talisman(app,
-    force_https=False,  # Set True in production
-    strict_transport_security=True,
-    content_security_policy={
-        'default-src': "'self'",
-        'script-src':  "'self'",
-        'style-src':   "'self' 'unsafe-inline'",
-        'img-src':     "'self' data:",
-        'connect-src': "'self'",
-    },
-    x_frame_options='DENY',
-    x_content_type_options=True,
-    referrer_policy='strict-origin-when-cross-origin'
-)
+    # --- Extensions ---
+    CORS(app, resources={r"/*": {
+        "origins": os.getenv('ALLOWED_ORIGINS', '*').split(','),
+        "expose_headers": ["X-Session-ID"]
+    }})
 
-# JWT Configuration
-app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY")
-if not app.config["JWT_SECRET_KEY"]:
-    raise RuntimeError("JWT_SECRET_KEY env var is required")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(seconds=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", 900)))
-app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(seconds=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES", 604800)))
-jwt = JWTManager(app)
+    jwt = JWTManager(app)
 
-@jwt.token_in_blocklist_loader
-def check_if_token_is_revoked(jwt_header, jwt_payload: dict):
-    jti = jwt_payload["jti"]
-    return RevokedToken.is_revoked(jti)
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        jti = jwt_payload["jti"]
+        return RevokedToken.is_revoked(jti)
 
-# Rate Limiter
-limiter = Limiter(app=app, key_func=get_remote_address)
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        storage_uri="memory://",
+        default_limits=["500 per hour"]
+    )
 
-# Database Initialization
-init_db(app)
-setup_database(app)
+    # --- Register Blueprints ---
+    from auth import auth_bp
+    from routes.chat_routes import chat_bp
+    from routes.admin_routes import admin_bp
+    from routes.workflow_routes import workflow_bp
+    from routes.tools_routes import tools_bp
+    from routes.status_routes import status_bp
+    from routes.document_routes import document_bp
 
-# Register Blueprints
-app.register_blueprint(auth_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(chat_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(workflow_bp)
+    app.register_blueprint(tools_bp)
+    app.register_blueprint(status_bp)
+    app.register_blueprint(document_bp)
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOADS_DIR
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
+    # --- CSV Helper ---
+    APPLICATIONS_CSV = os.path.join(os.path.dirname(__file__), 'csv', 'applications.csv')
 
-# Initialize agents
-underwriting_agent = UnderwritingAgent()
-sales_agent = SalesAgent()
-fraud_agent = FraudAgent()
+    def read_csv(file_path):
+        import csv
+        if not os.path.exists(file_path):
+            return []
+        with open(file_path, mode='r', encoding='utf-8') as f:
+            return list(csv.DictReader(f))
 
-# Initialize Active LLM Service
-llm_provider = os.getenv("LLM_PROVIDER", "openrouter").lower().strip()
-llm_service = OpenRouterService() if llm_provider == "openrouter" else GeminiService()
-
-# --- Decorators ---
-def require_role(role):
-    def decorator(f):
-        @wraps(f)
-        @jwt_required()
-        def decorated_function(*args, **kwargs):
-            claims = get_jwt()
-            if claims.get('role') != role:
-                return jsonify({"msg": "Admin privilege required"}), 403
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-# --- Security: After Request Hook ---
-@app.after_request
-def add_security_headers(response):
-    response.headers['Cache-Control'] = 'no-store'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    return response
-
-# --- Global Error Handler ---
-@app.errorhandler(Exception)
-def handle_exception(e):
-    app.logger.error(f"Unhandled exception: {str(e)}")
-    return jsonify({
-        'error': 'server_error',
-        'message': 'An error occurred'
-    }), 500
-
-# --- Utility Functions ---
-
-def get_session_id(request):
-    session_id = request.headers.get('X-Session-ID')
-    if not session_id:
-        session_id = f"session_{uuid.uuid4().hex[:16]}"
-    return session_id
-
-def log_chat_event(session_id, event_type, payload):
-    try:
-        log = ChatLog(
-            session_id=session_id,
-            event_type=event_type,
-            message_role=payload.get("role"),
-            message_text=payload.get("text"),
-            status=payload.get("status"),
-            details=payload.get("details", {})
-        )
-        db.session.add(log)
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Failed to log chat event: {e}")
-
-def initialize_user_session(session_id):
-    session = ChatSession.query.get(session_id)
-    if not session:
-        session = ChatSession(
-            session_id=session_id,
-            state={},
-            stage='COLLECTING_DETAILS'
-        )
-        # We need a MasterAgent instance to get initial state
-        temp_agent = MasterAgent()
-        session.set_state(temp_agent.state)
-        db.session.add(session)
-        db.session.commit()
-    return session
-
-def update_session_activity(session_id):
-    session = ChatSession.query.get(session_id)
-    if session:
-        session.touch()
-        db.session.commit()
-
-def get_bank_context():
-    try:
-        tuning_items = TuningContent.query.filter_by(is_active=True).all()
-        contents = [item.content.strip() for item in tuning_items if item.content.strip()]
-        if contents:
-            return "\n\n".join(contents)
-    except Exception as e:
-        app.logger.error(f"Error loading bank context: {e}")
-    return ""
-
-# --- Agent Interaction Helpers ---
-def determine_worker_from_stage(current_stage):
-    worker_map = {
-        'FRAUD_CHECK': "fraud",
-        'UNDERWRITING': "underwriting",
-        'OFFER_PRESENTATION': "sales",
-        'DOCUMENTATION': "documentation",
-        'REJECTION_COUNSELING': "sales"
-    }
-    # Handle both string and Enum if necessary, though SQLAlchemy stores as string
-    stage_str = current_stage.name if hasattr(current_stage, 'name') else str(current_stage)
-    return worker_map.get(stage_str, "none")
-
-def get_workflow_stage_details(stage):
-    # Mapping string stage names to display details
-    stage_name = stage.name if hasattr(stage, 'name') else str(stage)
-    stage_details = {
-        'COLLECTING_DETAILS': {"name": "Basic Details Collection", "progress": 20, "next": "KYC Collection"},
-        'KYC_COLLECTION': {"name": "KYC Verification", "progress": 40, "next": "Fraud Detection"},
-        'FRAUD_CHECK': {"name": "Fraud Detection", "progress": 60, "next": "Underwriting"},
-        'UNDERWRITING': {"name": "Underwriting", "progress": 80, "next": "Offer Presentation"},
-        'OFFER_PRESENTATION': {"name": "Offer Presentation", "progress": 90, "next": "Documentation"},
-        'DOCUMENTATION': {"name": "Documentation", "progress": 100, "next": "Completion"}
-    }
-    return stage_details.get(stage_name, {"name": "Unknown", "progress": 0})
-
-# --- API Endpoints ---
-
-@app.route('/chat', methods=['POST'])
-def chat():
-    try:
-        session_id = get_session_id(request)
-        data = request.get_json(silent=True) or {}
-        user_input = (data.get('message') or '').strip()
-
-        if not user_input:
-            return jsonify({'message': 'Please provide a message.', 'error': 'empty_input'}), 400
-        
-        log_chat_event(session_id, 'message', {'role': 'user', 'text': user_input})
-
-        db_session = initialize_user_session(session_id)
-        db_session.interaction_count += 1
-        
-        # Load agent state from DB
-        user_master_agent = MasterAgent()
-        user_master_agent.state = db_session.get_state()
-        
-        gemini_mode = os.getenv("LLM_MODE", "enabled").lower().strip()
-        system_prompt = os.getenv("LLM_SYSTEM_PROMPT", "You are CredGen AI.")
-        bank_context = get_bank_context()
-        if bank_context:
-            system_prompt = f"{system_prompt}\n\n[BANK SPECIFIC CONTEXT]\n{bank_context}\n[END CONTEXT]"
-
-        response = None
-        if gemini_mode == "enabled":
-            # (Simplified LLM logic for brevity, maintaining original intent)
-            current_stage = user_master_agent.state["stage"]
-            workflow_progress = user_master_agent.state.get("workflow_progress", 0)
-            stage_details = get_workflow_stage_details(current_stage)
-            
-            workflow_prompt = f"Stage: {stage_details.get('name')}, Progress: {workflow_progress}%"
-            full_system_prompt = f"{system_prompt}\n\n{workflow_prompt}"
-            
-            llm_resp = llm_service.generate_response(user_input, full_system_prompt)
-            if llm_resp.get("status") == "success":
-                # Handle entities if extracted
-                if "extracted_entities" in llm_resp:
-                    entities = {k: v for k, v in llm_resp["extracted_entities"].items() if v is not None}
-                    if entities:
-                        user_master_agent.update_state(entities, IntentType.PROVIDE_INFO)
-                
-                worker = determine_worker_from_stage(user_master_agent.state["stage"])
-                action_map = {"fraud": "call_fraud_api", "underwriting": "call_underwriting_api", "sales": "call_sales_api", "documentation": "call_documentation_api"}
-                
-                response = {
-                    "message": llm_resp.get("message", ""),
-                    "worker": worker,
-                    "action": action_map.get(worker, "none"),
-                    "stage": user_master_agent.state["stage"].value if hasattr(user_master_agent.state["stage"], 'value') else user_master_agent.state["stage"],
-                    "workflow_progress": user_master_agent.state.get("workflow_progress", 0),
-                    "session_id": session_id
-                }
-            else:
-                response = user_master_agent.handle(user_input)
-        else:
-            response = user_master_agent.handle(user_input)
-
-        if response is None:
-            response = user_master_agent.handle(user_input)
-
-        # Sync state back to DB
-        db_session.set_state(user_master_agent.state)
-        db_session.stage = user_master_agent.state["stage"].value if hasattr(user_master_agent.state["stage"], 'value') else user_master_agent.state["stage"]
-        db.session.commit()
-
-        log_chat_event(session_id, 'message', {
-            'role': 'assistant',
-            'text': response.get('message'),
-            'details': {'worker': response.get('worker'), 'stage': response.get('stage')}
+    @app.route('/admin/debug/applications')
+    def debug_applications():
+        rows = read_csv(APPLICATIONS_CSV)
+        return jsonify({
+            'count': len(rows),
+            'first_row': rows[0] if rows else None,
+            'csv_path': APPLICATIONS_CSV,
+            'file_exists': os.path.exists(APPLICATIONS_CSV)
         })
 
-        resp = jsonify(response)
-        resp.headers['X-Session-ID'] = session_id
-        return resp
-        
-    except Exception as e:
-        db.session.rollback()
-        app.logger.error(f"Error in /chat: {e}")
-        return jsonify({'message': 'An error occurred', 'error': 'server_error'}), 500
+    # --- Static File Serving ---
+    frontend_dir = os.path.join(os.path.dirname(__file__), 'frontend')
 
-@app.route('/underwrite', methods=['POST'])
-def underwrite():
+    @app.route('/')
+    def serve_landing():
+        return send_from_directory(frontend_dir, 'index.html')
+
+    @app.route('/status')
+    @app.route('/status.html')
+    def serve_status():
+        return send_from_directory(frontend_dir, 'status.html')
+
+    @app.route('/admin/login')
+    @app.route('/admin/login.html')
+    def serve_admin_login():
+        return send_from_directory(os.path.join(frontend_dir, 'admin'), 'login.html')
+
+    @app.route('/admin/dashboard')
+    @app.route('/admin/dashboard.html')
+    def serve_admin_dashboard():
+        return send_from_directory(os.path.join(frontend_dir, 'admin'), 'dashboard.html')
+
+    # Serve any file from frontend/ and frontend/admin/
+    @app.route('/admin/<path:filename>')
+    def serve_admin_static(filename):
+        admin_dir = os.path.join(frontend_dir, 'admin')
+        if os.path.isfile(os.path.join(admin_dir, filename)):
+            return send_from_directory(admin_dir, filename)
+        return jsonify({"error": "Not found"}), 404
+
+    @app.route('/fraud/test')
+    def test_fraud():
+        """Visit this URL to test fraud agent directly."""
+        try:
+            dummy = {
+                'loan_amount': 700000, 'tenure': 24, 'age': 26,
+                'income': 75000, 'credit_score': 700, 'num_active_loans': 0,
+                'num_closed_loans': 2, 'employment_type': 'salaried',
+                'pan': 'QWERT1234Y', 'aadhaar': '098765432112',
+                'name': 'Ashmeet Singh', 'phone': '9876543210',
+                'address': 'WZ-168 Old Sahib Pura New Delhi',
+                'pincode': '110018',
+            }
+            from utils.agent_factory import get_fraud_agent
+            fraud_agent_instance = get_fraud_agent()
+            print("[TEST] Running fraud check with dummy data...")
+            result = fraud_agent_instance.perform_fraud_check(dummy)
+            print(f"[TEST] Result: {result}")
+            return jsonify({'status': 'ok', 'result': result})
+        except Exception as e:
+            import traceback
+            return jsonify({
+                'status': 'error',
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }), 500
+
+    @app.route('/<path:filename>')
+    def serve_static(filename):
+        filepath = os.path.join(frontend_dir, filename)
+        if os.path.isfile(filepath):
+            return send_from_directory(frontend_dir, filename)
+        return jsonify({"error": "Not found"}), 404
+
+    # --- Global Error Handlers ---
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({"error": "Not found"}), 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return jsonify({"error": "Internal server error"}), 500
+
+    @app.errorhandler(429)
+    def rate_limited(e):
+        return jsonify({"error": "Rate limit exceeded. Try again later."}), 429
+
+    # --- Create Tables & Seed Admin ---
+    with app.app_context():
+        db.create_all()
+        _seed_admin_user()
+
+    return app
+
+
+def _seed_admin_user():
+    """Create default admin user if none exists."""
     try:
-        session_id = request.headers.get('X-Session-ID')
-        db_session = ChatSession.query.get(session_id)
-        if not db_session:
-            return jsonify({'error': 'Invalid session'}), 400
-        
-        user_master_agent = MasterAgent()
-        user_master_agent.state = db_session.get_state()
-        current_state = user_master_agent.state
+        if AdminUser.query.count() == 0:
+            username = os.getenv('SEED_ADMIN_USERNAME', 'admin')
+            email = os.getenv('SEED_ADMIN_EMAIL', 'admin@credgen.in')
+            password = os.getenv('SEED_ADMIN_PASSWORD', 'admin@123')
 
-        # Validation Logic (Simplified check)
-        if current_state.get('missing_kyc_fields'):
-             return jsonify({'message': 'KYC incomplete', 'error': 'kyc_incomplete'}), 400
-
-        underwriting_result = underwriting_agent.perform_underwriting(current_state['entities'])
-        user_master_agent.set_underwriting_result(
-            risk_score=underwriting_result['risk_score'],
-            approval_status=underwriting_result['approval_status'],
-            interest_rate=underwriting_result.get('interest_rate', 12.5)
-        )
-
-        db_session.set_state(user_master_agent.state)
-        db.session.commit()
-
-        response = {
-            'message': '✅ Approved!' if underwriting_result['approval_status'] else '❌ Rejected',
-            'approval_status': underwriting_result['approval_status'],
-            'worker': 'sales',
-            'action': 'call_sales_api'
-        }
-        return jsonify(response)
+            admin = AdminUser(
+                username=username,
+                email=email,
+                role='admin',
+                is_active=True
+            )
+            admin.set_password(password)
+            db.session.add(admin)
+            db.session.commit()
+            logger.info(f"Seeded admin user: {username}")
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': 'underwriting_failed'}), 500
+        logger.error(f"Admin seeding error: {e}")
 
-@app.route('/fraud', methods=['POST'])
-def fraud_check():
-    try:
-        session_id = request.headers.get('X-Session-ID')
-        db_session = ChatSession.query.get(session_id)
-        if not db_session: return jsonify({'error': 'Invalid session'}), 400
+# ─── ENTRY POINT ──────────────────────────────────────────────────────
 
-        user_master_agent = MasterAgent()
-        user_master_agent.state = db_session.get_state()
-        
-        fraud_result = fraud_agent.perform_fraud_check(user_master_agent.state['entities'])
-        user_master_agent.set_fraud_result(fraud_score=fraud_result['fraud_score'], fraud_flag=fraud_result['fraud_flag'])
+app = create_app()
 
-        db_session.set_state(user_master_agent.state)
-        db.session.commit()
-
-        return jsonify({'passed': fraud_result['fraud_flag'] != 'High', 'fraud_check': fraud_result})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'fraud_check_failed'}), 500
-
-@app.route('/documentation', methods=['POST'])
-def documentation():
-    try:
-        session_id = request.headers.get('X-Session-ID')
-        db_session = ChatSession.query.get(session_id)
-        if not db_session: return jsonify({'error': 'Invalid session'}), 400
-
-        user_master_agent = MasterAgent()
-        user_master_agent.state = db_session.get_state()
-
-        if not user_master_agent.state.get('offer_accepted'):
-            return jsonify({'error': 'Offer not accepted'}), 400
-
-        pdf_path = generate_sanction_pdf(user_master_agent.state)
-        user_master_agent.state['stage'] = ConversationStage.CLOSED
-        
-        db_session.set_state(user_master_agent.state)
-        db.session.commit()
-
-        return jsonify({'message': '✅ Sanction letter generated!', 'download_url': f'/download/{session_id}'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': 'documentation_failed'}), 500
-
-# --- Admin Routes (Protected) ---
-
-@app.route('/bank/admin/applications')
-@require_role('admin')
-def admin_applications():
-    apps = LoanApplication.query.all()
-    # Simplified: Returning as JSON for API-driven frontend, or render_template
-    return jsonify([{'id': str(a.application_id), 'status': a.status} for a in apps])
-
-@app.route('/bank/admin/tune', methods=['POST'])
-@require_role('admin')
-def admin_tune_post():
-    data = request.get_json()
-    content = data.get('content')
-    if not content: return jsonify({'error': 'No content'}), 400
-
-    try:
-        new_tune = TuningContent(content=content, type='policy')
-        db.session.add(new_tune)
-        db.session.commit()
-        return jsonify({'msg': 'Tuning added'})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-# --- Health & Maintenance ---
-
-@app.route('/health')
-def health():
-    return jsonify({'status': 'healthy', 'db': 'connected'})
-
-@app.cli.command("cleanup-sessions")
-def cleanup_sessions_command():
-    """Run via CLI: flask cleanup-sessions"""
-    deleted = ChatSession.query.filter(ChatSession.expires_at < datetime.utcnow()).delete()
-    db.session.commit()
-    print(f"Deleted {deleted} expired sessions")
+print("[STARTUP] Pre-warming ML models...")
+try:
+    from utils.agent_factory import get_fraud_agent, get_underwriting_agent
+    fraud_agent = get_fraud_agent()
+    underwriting_agent = get_underwriting_agent()
+    _dummy = {'loan_amount': 100000, 'tenure': 24, 'age': 30, 'income': 50000,
+              'credit_score': 700, 'num_active_loans': 0, 'employment_type': 'salaried',
+              'pan': 'ABCDE1234F', 'aadhaar': '123456789012', 'name': 'Test User',
+              'address': 'Test Address', 'pincode': '400001', 'purpose': 'personal'}
+    fraud_agent.perform_fraud_check(_dummy)
+    underwriting_agent.perform_underwriting(_dummy)
+    print("[STARTUP] Models pre-warmed successfully.")
+except Exception as e:
+    print(f"[STARTUP] Pre-warm skipped (non-fatal): {e}")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv('PORT', 5000))
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=True,
+        use_reloader=False,    # prevents torchvision/ML reload crashes
+        threaded=True
+    )

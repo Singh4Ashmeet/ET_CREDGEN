@@ -121,6 +121,29 @@ body.admin-body {
   box-shadow: 0 0 0 2px rgba(85, 85, 85, 0.1);
 }
 
+.checkbox-group {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  margin-top: -0.5rem;
+}
+
+.checkbox-group input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  cursor: pointer;
+  accent-color: var(--border-focus);
+}
+
+.checkbox-group label {
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.9rem !important;
+}
+
 .login-btn {
   background: var(--bg-button);
   color: var(--text);

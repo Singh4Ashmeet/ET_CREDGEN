@@ -1,215 +1,282 @@
-import numpy as np
-import copy # Used for safely updating state dictionary
+import logging
+from datetime import datetime
+from utils.config import INTEREST_BANDS
+
+logger = logging.getLogger(__name__)
+
 
 class SalesAgent:
-    
-    def __init__(self, config=None):
-        """Initializes the Sales Agent with business rules (Rule-Based Layer)."""
-        # Hard Rule Limits (Policy Rules)
-        self.BASE_RATE = 9.5         # Absolute minimum interest rate
-        self.MAX_RATE = 18.0
-        self.NEGOTIATION_DECREMENT = 0.5 # How much the rate drops upon negotiation
-        self.DEFAULT_ALTERNATIVE_OFFER_FACTOR = 0.6 # Rule: 60% of original amount if rejected
-        self.DEFAULT_TENURE_MONTHS = 36
-        
-        # --- AI MAPPING: Rule-Based Mapping of AI Risk Score ---
-        # The AI risk score (0.0 to 1.0) maps directly to rate tiers.
-        self.RISK_TIERS = {
-            "low": 0.2,    # Score <= 0.2: Best rate
-            "medium": 0.5, # Score <= 0.5: Standard rate
-            "high": 0.8    # Score <= 0.8: High rate
+    """
+    Enhanced Sales Agent.
+    Handles offer generation with versioning, negotiation limits,
+    counter-offers, and detailed rejection counseling.
+    """
+
+    # Negotiation limits
+    MAX_RATE_REDUCTION = 1.5      # Max 1.5% reduction from initial rate
+    MAX_AMOUNT_INCREASE_PCT = 10  # Max 10% increase over approved amount
+    MAX_OFFER_VERSIONS = 3        # After 3 negotiations → final offer
+    PROCESSING_FEE_PCT = 1.0      # 1% processing fee
+
+    def __init__(self):
+        logger.info("SalesAgent initialized")
+
+    # ------------------------------------------------------------------
+    # EMI / FINANCIALS
+    # ------------------------------------------------------------------
+
+    def _compute_emi(self, principal: float, annual_rate: float, months: int) -> float:
+        if principal <= 0 or months <= 0 or annual_rate <= 0:
+            return 0
+        r = annual_rate / 12 / 100
+        emi = principal * r * ((1 + r) ** months) / (((1 + r) ** months) - 1)
+        return round(emi, 2)
+
+    def _format_inr(self, amount) -> str:
+        """Format number in Indian comma style."""
+        try:
+            amount = int(round(float(amount)))
+            s = str(amount)
+            if len(s) <= 3:
+                return s
+            last_three = s[-3:]
+            rest = s[:-3]
+            groups = []
+            while rest:
+                groups.insert(0, rest[-2:])
+                rest = rest[:-2]
+            return ','.join(groups) + ',' + last_three
+        except Exception:
+            return str(amount)
+
+    # ------------------------------------------------------------------
+    # OFFER GENERATION
+    # ------------------------------------------------------------------
+
+    def generate_offer(self, entities: dict, underwriting_result: dict,
+                       current_version: int = 0, negotiation_request: dict = None) -> dict:
+        """
+        Generate or counter-offer based on underwriting result.
+
+        Args:
+            entities: User's collected entities
+            underwriting_result: Dict from UnderwritingAgent
+            current_version: Current offer version (0 = first offer)
+            negotiation_request: Optional dict with rate/amount the user wants
+
+        Returns:
+            Offer dict with all financial details + version info
+        """
+        base_rate = underwriting_result.get('interest_rate', 12.5)
+        approved_amount = underwriting_result.get('approved_amount',
+                          entities.get('loan_amount', 0))
+        tenure = underwriting_result.get('tenure_months',
+                 entities.get('tenure', 36))
+        risk_band = underwriting_result.get('risk_band', 'medium')
+
+        new_version = current_version + 1
+        is_final = new_version >= self.MAX_OFFER_VERSIONS
+
+        # Apply negotiation if requested
+        offer_rate = base_rate
+        offer_amount = approved_amount
+
+        if negotiation_request and new_version > 1:
+            requested_rate = negotiation_request.get('rate')
+            requested_amount = negotiation_request.get('amount')
+
+            # Rate negotiation
+            if requested_rate is not None:
+                min_allowed_rate = base_rate - self.MAX_RATE_REDUCTION
+                # Meet halfway between current and requested, but not below min
+                if requested_rate < min_allowed_rate:
+                    offer_rate = min_allowed_rate
+                elif requested_rate < base_rate:
+                    # Give partial concession
+                    concession = (base_rate - requested_rate) * 0.5
+                    offer_rate = round(base_rate - concession, 2)
+                    offer_rate = max(offer_rate, min_allowed_rate)
+
+            # Amount negotiation
+            if requested_amount is not None and requested_amount > approved_amount:
+                max_allowed = approved_amount * (1 + self.MAX_AMOUNT_INCREASE_PCT / 100)
+                if requested_amount <= max_allowed:
+                    offer_amount = requested_amount
+                else:
+                    offer_amount = max_allowed
+
+        # Compute financials
+        emi = self._compute_emi(offer_amount, offer_rate, tenure)
+        processing_fee = round(offer_amount * self.PROCESSING_FEE_PCT / 100, 2)
+        total_interest = round(emi * tenure - offer_amount, 2)
+        total_payable = round(emi * tenure + processing_fee, 2)
+
+        offer = {
+            "loan_amount": offer_amount,
+            "interest_rate": offer_rate,
+            "tenure_months": tenure,
+            "monthly_emi": emi,
+            "processing_fee": processing_fee,
+            "total_interest": total_interest,
+            "total_payable": total_payable,
+            "risk_band": risk_band,
+            "offer_version": new_version,
+            "is_final": is_final,
+            "created_at": datetime.utcnow().isoformat(),
         }
 
-    def calculate_interest(self, risk_score: float) -> float:
-        """
-        AI + Rule-Based Interest Calculation. 
-        Uses the AI-generated risk_score to determine the price tier.
-        """
-        # RULE: Check against risk tiers
-        if risk_score <= self.RISK_TIERS["low"]:
-            rate = self.BASE_RATE
-        elif risk_score <= self.RISK_TIERS["medium"]:
-            rate = self.BASE_RATE + 2.5 # E.g., 9.5 + 2.5 = 12.0%
-        elif risk_score <= self.RISK_TIERS["high"]:
-            rate = self.BASE_RATE + 5.5 # E.g., 9.5 + 5.5 = 15.0%
+        # Build message
+        if is_final:
+            offer["message"] = (
+                f"This is our best and final offer:\n\n"
+                f"💰 **Loan Amount:** ₹{self._format_inr(offer_amount)}\n"
+                f"📊 **Interest Rate:** {offer_rate}% p.a.\n"
+                f"📅 **Tenure:** {tenure} months\n"
+                f"💳 **Monthly EMI:** ₹{self._format_inr(emi)}\n"
+                f"🏷️ **Processing Fee:** ₹{self._format_inr(processing_fee)}\n"
+                f"📈 **Total Payable:** ₹{self._format_inr(total_payable)}\n\n"
+                f"Would you like to accept this offer?"
+            )
+        elif new_version > 1:
+            offer["message"] = (
+                f"Here's our revised offer (Version {new_version}):\n\n"
+                f"💰 **Loan Amount:** ₹{self._format_inr(offer_amount)}\n"
+                f"📊 **Interest Rate:** {offer_rate}% p.a.\n"
+                f"📅 **Tenure:** {tenure} months\n"
+                f"💳 **Monthly EMI:** ₹{self._format_inr(emi)}\n"
+                f"🏷️ **Processing Fee:** ₹{self._format_inr(processing_fee)}\n"
+                f"📈 **Total Payable:** ₹{self._format_inr(total_payable)}\n\n"
+                f"You can accept, negotiate further, or decline."
+            )
         else:
-            rate = self.MAX_RATE
-            
-        # RULE: Final rate cannot exceed MAX_RATE
-        return min(rate, self.MAX_RATE)
+            offer["message"] = (
+                f"Based on your profile, here's your loan offer:\n\n"
+                f"💰 **Loan Amount:** ₹{self._format_inr(offer_amount)}\n"
+                f"📊 **Interest Rate:** {offer_rate}% p.a.\n"
+                f"📅 **Tenure:** {tenure} months\n"
+                f"💳 **Monthly EMI:** ₹{self._format_inr(emi)}\n"
+                f"🏷️ **Processing Fee:** ₹{self._format_inr(processing_fee)}\n"
+                f"📈 **Total Payable:** ₹{self._format_inr(total_payable)}\n\n"
+                f"You can **accept**, **negotiate**, or **decline** this offer."
+            )
 
-    def _calculate_emi(self, principal, rate_annual, tenure_months):
-        """Helper function to calculate the Equated Monthly Installment (EMI)."""
-        rate_monthly = (rate_annual / 12) / 100
-        # Formula: P * r * (1+r)^n / ((1+r)^n - 1)
-        if rate_monthly == 0: 
-            return principal / tenure_months
-        power_term = (1 + rate_monthly) ** tenure_months
-        emi = principal * rate_monthly * power_term / (power_term - 1)
-        return round(emi, 0)
-    
-    def format_offer_message(self, offer_type: str, **kwargs) -> dict:
+        offer["suggestions"] = ["Accept Offer", "Negotiate Rate", "Decline"]
+
+        logger.info(f"Offer v{new_version}: ₹{offer_amount} @ {offer_rate}%, EMI ₹{emi}")
+        return offer
+
+    # ------------------------------------------------------------------
+    # REJECTION COUNSELING
+    # ------------------------------------------------------------------
+
+    def provide_counseling(self, entities: dict, rejection_reasons: list,
+                           max_eligible_amount: float = 0,
+                           underwriting_result: dict = None) -> dict:
         """
-        Generates the final human-readable message and sets the action flag.
+        Provide specific, actionable counseling for rejected applications.
+        Suggests alternative amounts if eligible, and concrete next steps.
         """
-        principal_formatted = f"₹{kwargs.get('principal', 0):,}"
-        
-        if offer_type == "approved":
-            message = (
-                f"Congratulations, {kwargs.get('name', 'Applicant')}! 🎉 Your loan for **{principal_formatted}** is pre-approved! "
-                f"We are happy to offer you an interest rate of **{kwargs['rate']:.2f}%** per annum "
-                f"for a tenure of **{kwargs['tenure']} years**. "
-                f"Your estimated EMI is **₹{kwargs['emi']:,}**."
-                f"\n\nDo you accept this offer?"
-            )
-            return {"message": message, "action": "wait_for_offer_decision", "interest_rate": kwargs['rate']}
+        advice_lines = []
+        suggestions = []
 
-        elif offer_type == "negotiated":
-            message = (
-                f"Great news! We have applied a policy discount. Your revised rate is **{kwargs['rate']:.2f}%** for a {kwargs['tenure']} year tenure, "
-                f"which is the lowest we can offer you! "
-                f"\n\nAccept this revised offer now?"
-            )
-            return {"message": message, "action": "wait_for_offer_decision", "interest_rate": kwargs['rate']}
+        # Category-specific advice
+        for reason in rejection_reasons:
+            reason_lower = reason.lower()
 
-        elif offer_type == "rejected_alternative":
-            new_principal_formatted = f"₹{kwargs.get('new_principal', 0):,}"
-            message = (
-                f"Hello {kwargs.get('name', 'Applicant')}. While we couldn't approve your request for {principal_formatted}, "
-                f"our Sales Agent has generated an **alternative offer** for you: "
-                f"We can offer **{new_principal_formatted}** at **{kwargs['rate']:.2f}%** per annum. "
-                f"\n\nWould you like to proceed with this alternative, lower amount?"
-            )
-            return {"message": message, "action": "wait_for_offer_decision", "interest_rate": kwargs['rate'], "new_amount": kwargs.get('new_principal')}
-            
-        elif offer_type == "rejected_final":
-             message = (
-                 f"We sincerely apologize, but based on your current financial profile and credit policy, "
-                 f"we are unable to offer you a loan at this time, even with a reduced amount."
-                 f"Thank you for considering CredGen. Goodbye."
-             )
-             return {"message": message, "action": "end_session", "interest_rate": kwargs['rate']}
-
-        return {"message": "I'm having trouble calculating the offer. Please try again later.", "action": "end_session"}
-
-
-    def generate_offer(self, master_agent_state: dict, negotiation_request: bool = False) -> dict:
-        """Handles approval, negotiation, and rejection counseling."""
-        # Use a copy to ensure we are working with the latest data, not directly mutating state
-        entities = master_agent_state['entities']
-        risk_score = master_agent_state['risk_score']
-        principal = entities.get('loan_amount', 0)
-        tenure = entities.get('tenure', self.DEFAULT_TENURE_MONTHS)
-        underwriting_approved = master_agent_state.get('approval_status', False)
-
-        # 1. Handle Hard Rejection (Rejection Counseling Logic)
-        if not underwriting_approved:
-            # Rule: Calculate the alternative offer amount (60% of original)
-            new_principal = int(principal * self.DEFAULT_ALTERNATIVE_OFFER_FACTOR)
-            interest_rate = self.calculate_interest(risk_score) 
-            
-            # Rule: Hard floor for alternative loan amount
-            if new_principal < 50000: 
-                return self.format_offer_message("rejected_final", principal=principal, rate=interest_rate)
-
-            emi = self._calculate_emi(new_principal, interest_rate, tenure)
-
-            return self.format_offer_message(
-                offer_type="rejected_alternative",
-                name=entities.get('name', 'Applicant'),
-                principal=principal,
-                new_principal=new_principal,
-                tenure=tenure // 12,
-                rate=interest_rate,
-                emi=emi
-            )
-
-        # 2. Handle Standard Offer / Negotiation
-        interest_rate = master_agent_state.get('interest_rate') # Use the rate set by UnderwritingAgent first
-        
-        # Rule: Negotiation Logic
-        if negotiation_request:
-            # Rule: Reduce rate by fixed decrement, but never below BASE_RATE
-            negotiated_rate = interest_rate - self.NEGOTIATION_DECREMENT
-            interest_rate = max(self.BASE_RATE, negotiated_rate) 
-        
-        emi = self._calculate_emi(principal, interest_rate, tenure)
-        
-        offer_type = "negotiated" if negotiation_request else "approved"
-        
-        if negotiation_request:
-             master_agent_state['interest_rate'] = interest_rate
-             
-        return self.format_offer_message(
-            offer_type=offer_type,
-            name=entities.get('name', 'Applicant'),
-            principal=principal,
-            tenure=tenure // 12,
-            rate=interest_rate,
-            emi=emi
-        )
-    def provide_counseling(self, master_agent_state: dict) -> str:
-        """
-        Provides counseling and alternative options for rejected applications.
-        Called from app.py when in REJECTION_COUNSELING stage.
-        """
-        entities = master_agent_state['entities']
-        risk_score = master_agent_state.get('risk_score', 1.0)
-        approval_status = master_agent_state.get('approval_status', False)
-        
-        principal = entities.get('loan_amount', 0)
-        
-        print(f"\n{'='*60}")
-        print("REJECTION COUNSELING ACTIVATED")
-        print(f"Risk Score: {risk_score}, Approval Status: {approval_status}")
-        print(f"Loan Amount Requested: ₹{principal:,}")
-        print(f"{'='*60}")
-        
-        # Different counseling messages based on rejection reason
-        if risk_score >= 0.8:
-            return (
-                f"Based on our assessment, your current risk profile doesn't meet our approval criteria. "
-                f"\n\n**Recommendations:**"
-                f"\n1. **Improve Credit Score** - Aim for a CIBIL score above 750"
-                f"\n2. **Reduce Debt-to-Income Ratio** - Below 40% is ideal"
-                f"\n3. **Stable Employment** - At least 2 years in current job"
-                f"\n4. **Reapply in 3-6 months** after improving these factors"
-                f"\n\nWould you like me to suggest an alternative loan amount?"
-            )
-        
-        elif approval_status is False and risk_score < 0.8:
-            # Rule: Calculate the alternative offer amount (60% of original)
-            new_principal = int(principal * self.DEFAULT_ALTERNATIVE_OFFER_FACTOR)
-            
-            # Rule: Hard floor for alternative loan amount
-            if new_principal < 50000: 
-                return (
-                    f"While we cannot approve your requested amount of ₹{principal:,}, "
-                    f"we recommend:"
-                    f"\n• Starting with a smaller loan (₹50,000 minimum)"
-                    f"\n• Building credit history with timely payments"
-                    f"\n• Reapplying after 6 months"
-                    f"\n\nWould you like to apply for a ₹50,000 loan instead?"
+            if 'credit score' in reason_lower:
+                advice_lines.append(
+                    "📋 **Improve Credit Score:** Pay off outstanding dues, maintain low "
+                    "credit utilization, and avoid new credit inquiries for 3-6 months."
                 )
-            
-            return (
-                f"While we couldn't approve your full request of ₹{principal:,}, "
-                f"we have an **alternative offer** for you!"
-                f"\n\n**We can approve: ₹{new_principal:,}**"
-                f"\n• Interest rate: Based on your profile"
-                f"\n• Same tenure options available"
-                f"\n• Quick disbursement upon approval"
-                f"\n\nWould you like to proceed with this alternative amount?"
+            elif 'age' in reason_lower and 'below' in reason_lower:
+                advice_lines.append(
+                    "👤 **Age Requirement:** You need to be at least 21 to apply. "
+                    "Consider applying with a co-borrower who meets the age criteria."
+                )
+            elif 'age' in reason_lower and 'above' in reason_lower:
+                advice_lines.append(
+                    "👤 **Age Limit:** For applicants above 65, we recommend shorter "
+                    "tenure loans or adding a co-borrower."
+                )
+            elif 'income' in reason_lower and 'below' in reason_lower:
+                advice_lines.append(
+                    "💼 **Income Requirement:** Consider adding a co-applicant's income "
+                    "or providing additional income proof (rent, investments, freelancing)."
+                )
+            elif 'dti' in reason_lower:
+                advice_lines.append(
+                    "💳 **High Debt Burden:** Try reducing existing EMIs/obligations "
+                    "before reapplying. Closing 1-2 active loans can significantly "
+                    "improve eligibility."
+                )
+            elif 'lti' in reason_lower:
+                advice_lines.append(
+                    "📊 **Loan-to-Income Ratio:** The requested amount is high relative "
+                    "to your income. Consider a smaller amount or longer tenure."
+                )
+            elif 'risk' in reason_lower:
+                advice_lines.append(
+                    "⚡ **Risk Profile:** Maintain consistent employment, reduce "
+                    "outstanding debts, and ensure timely payments on existing loans."
+                )
+            elif 'amount' in reason_lower and 'exceeds' in reason_lower:
+                advice_lines.append(
+                    "💰 **Amount Exceeds Eligibility:** You may qualify for a smaller "
+                    "loan amount based on your income and existing obligations."
+                )
+
+        # Suggest alternative if any amount is eligible
+        if max_eligible_amount and max_eligible_amount > 50000:
+            rate = 14.0
+            if underwriting_result:
+                rate = underwriting_result.get('interest_rate', 14.0)
+            tenure = entities.get('tenure', 36)
+            alt_emi = self._compute_emi(max_eligible_amount, rate, tenure)
+
+            advice_lines.append(
+                f"\n🔄 **Alternative Offer:** You may qualify for ₹{self._format_inr(max_eligible_amount)} "
+                f"at {rate}% p.a. with EMI of ₹{self._format_inr(alt_emi)}/month. "
+                f"Would you like to explore this option?"
             )
-        
+            suggestions = ["Try Lower Amount", "Start New Application", "Exit"]
         else:
-            # Generic counseling
-            return (
-                f"Thank you for your application. Unfortunately, it doesn't meet our current criteria."
-                f"\n\n**Next Steps:**"
-                f"\n1. Review your credit report for any errors"
-                f"\n2. Pay down existing credit card balances"
-                f"\n3. Avoid new credit applications for 3-6 months"
-                f"\n4. Consider a co-applicant with stronger credit"
-                f"\n\nYou can reapply in 90 days. Need help with credit improvement?"
+            advice_lines.append(
+                "\n📞 **Next Steps:** Please visit your nearest branch or call our "
+                "helpline (1800-XXX-XXXX) for personalized assistance."
             )
+            suggestions = ["Start New Application", "Exit"]
+
+        if not advice_lines:
+            advice_lines.append(
+                "We weren't able to approve your application at this time. "
+                "Please ensure all your details are accurate and try again later."
+            )
+
+        message = (
+            "We understand this isn't the outcome you were hoping for. "
+            "Here's what you can do:\n\n" + "\n\n".join(advice_lines)
+        )
+
+        return {
+            "message": message,
+            "suggestions": suggestions,
+            "max_eligible_amount": max_eligible_amount,
+            "rejection_reasons": rejection_reasons,
+        }
+
+    # ------------------------------------------------------------------
+    # OFFER ACCEPTANCE
+    # ------------------------------------------------------------------
+
+    def accept_offer(self, offer: dict) -> dict:
+        """Process offer acceptance."""
+        return {
+            "message": (
+                f"🎉 Congratulations! Your loan of ₹{self._format_inr(offer.get('loan_amount', 0))} "
+                f"has been confirmed!\n\n"
+                f"We'll now generate your **Sanction Letter**. Please wait a moment..."
+            ),
+            "accepted": True,
+            "offer": offer,
+            "next_action": "documentation",
+        }

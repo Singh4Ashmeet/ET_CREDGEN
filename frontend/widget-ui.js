@@ -1,325 +1,126 @@
-// frontend/widget-ui.js
-// Dynamically builds the entire widget UI so widget.html can stay empty.
-
 (function() {
-    'use strict';
+    // Default Config
+    const config = Object.assign({
+        primaryColor: '#4f46e5',
+        bankName: 'Bank',
+        logoUrl: '',
+        welcomeMessage: 'Hi! I can help you with a loan.',
+        position: 'bottom-right',
+        showBranding: true
+    }, window.CredGenConfig || {});
 
-    function buildWidgetUI() {
-        const root = document.createElement('div');
-        root.id = "credgen-chat-root";
+    // Styles
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .cg-widget-fab {
+            position: fixed; ${config.position.includes('left') ? 'left: 20px;' : 'right: 20px;'} bottom: 20px;
+            width: 60px; height: 60px; border-radius: 50%;
+            background: ${config.primaryColor}; color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: none; cursor: pointer; z-index: 99999;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; transition: transform 0.2s;
+        }
+        .cg-widget-fab:hover { transform: scale(1.05); }
+        
+        .cg-widget-container {
+            position: fixed; ${config.position.includes('left') ? 'left: 20px;' : 'right: 20px;'} bottom: 90px;
+            width: 380px; height: 600px; max-height: 80vh;
+            background: white; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            z-index: 99999; display: none; flex-direction: column;
+            overflow: hidden; border: 1px solid #e5e7eb;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .cg-widget-header {
+            background: ${config.primaryColor}; color: white;
+            padding: 16px; display: flex; justify-content: space-between; align-items: center;
+        }
+        
+        .cg-iframe { width: 100%; height: 100%; border: none; }
+        
+        .cg-close-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+        
+        @media (max-width: 480px) {
+            .cg-widget-container {
+                inset: 0; width: 100%; height: 100%; max-height: none;
+                bottom: 0; right: 0; left: 0; border-radius: 0;
+            }
+        }
+    `;
+    document.head.appendChild(style);
 
-        // Full UI recreated from original widget.html
-        root.innerHTML = `
-            <button id="credgen-toggle" class="credgen-toggle-btn" aria-label="Open chat">
-                <i class="fas fa-comment-dots"></i>
-            </button>
+    // Elements
+    const fab = document.createElement('button');
+    fab.className = 'cg-widget-fab';
+    fab.innerHTML = '💬';
+    fab.setAttribute('aria-label', 'Open Chat');
+    
+    const container = document.createElement('div');
+    container.className = 'cg-widget-container';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'cg-widget-header';
+    header.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+            ${config.logoUrl ? `<img src="${config.logoUrl}" style="width:24px;height:24px;">` : ''}
+            <strong>${config.bankName}</strong>
+        </div>
+    `;
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'cg-close-btn';
+    closeBtn.innerHTML = '×';
+    closeBtn.onclick = toggleWidget;
+    header.appendChild(closeBtn);
+    container.appendChild(header);
 
-            <div id="credgen-chatbox" class="credgen-chatbox" aria-hidden="true">
-                <header class="credgen-header">
-                    <div class="credgen-header-info">
-                        <span class="credgen-title">CREDGEN Assistant</span>
-                        <span class="credgen-subtitle">AI-powered loan chatbot</span>
-                    </div>
-                    <div class="credgen-header-controls">
-                        <button id="credgen-fullscreen" class="credgen-control-btn" aria-label="Toggle fullscreen">
-                            <i class="fas fa-expand"></i>
-                        </button>
-                        <button id="credgen-clear" class="credgen-control-btn credgen-clear-btn" aria-label="Clear chat">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                        <button id="credgen-close" class="credgen-close-btn" aria-label="Close chat">×</button>
-                    </div>
-                </header>
+    // Iframe (loading the main chat app)
+    // Assuming the main app is served at / or /chat-widget
+    // Since we are rewriting index.html, we can use /frontend/index.html if served correctly, 
+    // or just assume root / is the chat app.
+    // For this refactor, let's assume root / is the app.
+    const iframe = document.createElement('iframe');
+    iframe.className = 'cg-iframe';
+    iframe.src = '/'; 
+    container.appendChild(iframe);
 
-                <div id="credgen-messages" class="credgen-messages" role="log" aria-live="polite"></div>
-
-                <div id="credgen-attachments" class="credgen-attachments"></div>
-
-                <form id="credgen-form" class="credgen-input-row">
-                    <button type="button" id="credgen-attach" class="credgen-attach-btn" aria-label="Attach files">
-                        <i class="fas fa-paperclip"></i>
-                    </button>
-
-                    <input
-                        id="credgen-input"
-                        type="text"
-                        placeholder="Type your message..."
-                        autocomplete="off"
-                        aria-label="Chat message"
-                    />
-
-                    <div class="credgen-quick-msg-container">
-                        <button type="button" id="credgen-quick-msg" class="credgen-quick-msg-btn" aria-label="Quick messages">
-                            <i class="fas fa-comment-dots"></i>
-                        </button>
-                        <div class="credgen-quick-msg-dropdown">
-                            <div class="quick-msg-item" data-msg="I need a loan">I need a loan</div>
-                            <div class="quick-msg-item" data-msg="What documents do I need?">What documents do I need?</div>
-                            <div class="quick-msg-item" data-msg="What is the interest rate?">What is the interest rate?</div>
-                            <div class="quick-msg-item" data-msg="How much can I borrow?">How much can I borrow?</div>
-                            <div class="quick-msg-item" data-msg="What is the processing time?">What is the processing time?</div>
-                        </div>
-                    </div>
-
-                    <input type="file" id="credgen-file-input" multiple style="display:none;" />
-                    <button type="submit" class="credgen-send-btn">Send</button>
-                </form>
-            </div>
-        `;
-
-        document.body.appendChild(root);
-        initializeUIEvents();
+    // Footer Branding
+    if (config.showBranding) {
+        const footer = document.createElement('div');
+        footer.style.cssText = 'padding: 8px; text-align: center; font-size: 10px; color: #6b7280; background: #f9fafb; border-top: 1px solid #e5e7eb;';
+        footer.innerHTML = 'Powered by <strong>CredGen AI</strong>';
+        container.appendChild(footer);
     }
 
-    function initializeUIEvents() {
-        const toggleBtn = document.getElementById('credgen-toggle');
-        const closeBtn = document.getElementById('credgen-close');
-        const fullscreenBtn = document.getElementById('credgen-fullscreen');
-        const clearBtn = document.getElementById('credgen-clear');
-        const chatbox = document.getElementById('credgen-chatbox');
-        const chatRoot = document.getElementById('credgen-chat-root');
-        const form = document.getElementById('credgen-form');
-        const input = document.getElementById('credgen-input');
-        const messagesContainer = document.getElementById('credgen-messages');
-        const attachBtn = document.getElementById('credgen-attach');
-        const fileInput = document.getElementById('credgen-file-input');
-        const attachmentsContainer = document.getElementById('credgen-attachments');
-        const quickMsgBtn = document.getElementById('credgen-quick-msg');
-        const quickMsgContainer = document.querySelector('.credgen-quick-msg-container');
-        const quickMsgDropdown = document.querySelector('.credgen-quick-msg-dropdown');
+    document.body.appendChild(fab);
+    document.body.appendChild(container);
 
-        window.credgenAttachedFiles = window.credgenAttachedFiles || [];
-        const attachedFiles = window.credgenAttachedFiles;
-
-        const MAX_FILES = 5;
-        const MAX_TOTAL_SIZE = 10 * 1024 * 1024;
-
-        // Toggle visibility
-        toggleBtn.addEventListener('click', () => {
-            const isHidden = chatbox.getAttribute('aria-hidden') === 'true';
-            chatbox.setAttribute('aria-hidden', !isHidden);
-            if (!isHidden) input.focus();
-        });
-
-        closeBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            chatbox.setAttribute('aria-hidden', 'true');
-        });
-
-        document.addEventListener('click', e => {
-            if (chatbox.getAttribute('aria-hidden') === 'true') return;
-            if (!chatRoot.contains(e.target) && !toggleBtn.contains(e.target)) {
-                chatbox.setAttribute('aria-hidden', 'true');
-            }
-        });
-
-        chatbox.addEventListener('click', e => e.stopPropagation());
-
-        fullscreenBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            const isFullscreen = chatbox.classList.contains('fullscreen');
-            chatbox.classList.toggle('fullscreen');
-            fullscreenBtn.innerHTML = isFullscreen
-                ? '<i class="fas fa-expand"></i>'
-                : '<i class="fas fa-compress"></i>';
-        });
-
-        clearBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            if (!confirm('Clear all messages?')) return;
-
-            messagesContainer.innerHTML = '';
-            clearAttachments();
-
-            localStorage.removeItem('CREDGEN_SESSION_ID');
-            if (window.resetChatSession) window.resetChatSession();
-
-            window.dispatchEvent(new CustomEvent('credgen:clear-chat'));
-        });
-
-        // Expose function to update quick replies dynamicallly
-        window.updateQuickReplies = function(suggestions) {
-            const dropdown = document.querySelector('.credgen-quick-msg-dropdown');
-            if (!dropdown) return;
-            
-            // Clear existing
-            dropdown.innerHTML = '';
-            
-            if (!suggestions || suggestions.length === 0) {
-                 // Default fallback if empty
-                 suggestions = [
-                    "I need a loan",
-                    "What documents do I need?",
-                    "What is the interest rate?"
-                 ];
-            }
-            
-            suggestions.forEach(msg => {
-                const item = document.createElement('div');
-                item.className = 'quick-msg-item';
-                item.dataset.msg = msg;
-                item.textContent = msg;
-                
-                item.addEventListener('click', e => {
-                    e.stopPropagation();
-                    const input = document.getElementById('credgen-input');
-                    if (input) {
-                        input.value = item.dataset.msg;
-                        input.focus();
-                        dropdown.style.display = 'none';
-                    }
-                });
-                
-                dropdown.appendChild(item);
-            });
-        };
-
-        // Quick messages
-        quickMsgBtn.addEventListener('click', e => {
-            e.stopPropagation();
-            quickMsgDropdown.style.display =
-                quickMsgDropdown.style.display === 'block' ? 'none' : 'block';
-        });
-
-        document.addEventListener('click', e => {
-            if (!quickMsgContainer.contains(e.target)) {
-                quickMsgDropdown.style.display = 'none';
-            }
-        });
-
-        // Initialize with defaults
-        window.updateQuickReplies(null);
-
-        // File attachments
-        attachBtn.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', e => {
-            const files = Array.from(e.target.files);
-
-            if (attachedFiles.length + files.length > MAX_FILES) {
-                alert(`You can only attach up to ${MAX_FILES} files.`);
-                fileInput.value = '';
-                return;
-            }
-
-            const totalSize =
-                attachedFiles.reduce((s, f) => s + f.size, 0) +
-                files.reduce((s, f) => s + f.size, 0);
-
-            if (totalSize > MAX_TOTAL_SIZE) {
-                alert('Total file size exceeds 10MB');
-                fileInput.value = '';
-                return;
-            }
-
-            files.forEach(file => {
-                window.credgenAttachedFiles.push(file);
-                addFilePreview(file);
-            });
-
-            fileInput.value = '';
-            updateAttachmentButton();
-            input.focus();
-        });
-
-        // Attachment helpers
-        function addFilePreview(file) {
-            const el = document.createElement('div');
-            el.className = 'attachment-preview';
-            el.dataset.id = file.name + file.size;
-
-            el.innerHTML = `
-                <div class="file-info">
-                    <div class="file-icon">${getFileIcon(getFileType(file.type))}</div>
-                    <div class="file-details">
-                        <div class="file-name">${truncate(file.name)}</div>
-                        <div class="file-size">${formatBytes(file.size)}</div>
-                    </div>
-                </div>
-                <button type="button" class="remove-file">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-
-            attachmentsContainer.appendChild(el);
-            attachmentsContainer.style.display = 'block';
-
-            el.querySelector('.remove-file').addEventListener('click', () => removeFile(file));
+    // Toggle Logic
+    let isOpen = false;
+    function toggleWidget() {
+        isOpen = !isOpen;
+        container.style.display = isOpen ? 'flex' : 'none';
+        fab.style.display = isOpen ? 'none' : 'flex';
+        
+        if (isOpen && window.innerWidth < 480) {
+            document.body.style.overflow = 'hidden'; // Prevent background scroll
+        } else {
+            document.body.style.overflow = '';
         }
-
-        function removeFile(file) {
-            const id = file.name + file.size;
-            window.credgenAttachedFiles =
-                window.credgenAttachedFiles.filter(f => f.name + f.size !== id);
-
-            const el = attachmentsContainer.querySelector(`[data-id="${id}"]`);
-            if (el) el.remove();
-
-            if (window.credgenAttachedFiles.length === 0) {
-                attachmentsContainer.style.display = 'none';
-            }
-
-            updateAttachmentButton();
-        }
-
-        function clearAttachments() {
-            window.credgenAttachedFiles = [];
-            attachmentsContainer.innerHTML = '';
-            attachmentsContainer.style.display = 'none';
-            updateAttachmentButton();
-        }
-
-        function updateAttachmentButton() {
-            const count = window.credgenAttachedFiles.length;
-            if (count > 0) {
-                attachBtn.classList.add('has-files');
-                attachBtn.dataset.count = count;
-            } else {
-                attachBtn.classList.remove('has-files');
-                attachBtn.removeAttribute('data-count');
-            }
-        }
-
-        // Utility helpers
-        function getFileType(type) {
-            if (type.startsWith('image/')) return 'image';
-            if (type === 'application/pdf') return 'pdf';
-            if (type.includes('word') || type.includes('text')) return 'document';
-            if (type.includes('spreadsheet') || type.includes('excel')) return 'spreadsheet';
-            return 'file';
-        }
-
-        function getFileIcon(type) {
-            const icons = {
-                pdf: '<i class="fas fa-file-pdf"></i>',
-                image: '<i class="fas fa-file-image"></i>',
-                document: '<i class="fas fa-file-word"></i>',
-                spreadsheet: '<i class="fas fa-file-excel"></i>',
-                file: '<i class="fas fa-file"></i>'
-            };
-            return icons[type] || icons.file;
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
-        }
-
-        function truncate(name, len = 20) {
-            return name.length <= len ? name : name.substring(0, len - 3) + '...';
-        }
-
-        // Expose functions for chat.js
-        window.getAttachedFiles = () => [...window.credgenAttachedFiles];
-        window.clearAttachments = clearAttachments;
-        window.getFileType = getFileType;
-        window.getFileIcon = getFileIcon;
-        window.formatBytes = formatBytes;
     }
 
-    // Build UI immediately
-    buildWidgetUI();
+    fab.addEventListener('click', toggleWidget);
+
+    // Visual Viewport Fix for Mobile Keyboard
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+            if (isOpen && window.innerWidth < 480) {
+                container.style.height = `${window.visualViewport.height}px`;
+                // Adjust iframe height if needed
+            }
+        });
+    }
+
 })();

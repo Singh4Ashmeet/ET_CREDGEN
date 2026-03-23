@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login — CredGen</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <!-- LEFT BRAND PANEL -->
+        <div class="login-brand">
+            <div class="brand-content">
+                <div class="brand-logo">CG</div>
+                <h1>CredGen</h1>
+                <p>Admin Control Panel</p>
+                <div class="brand-features">
+                    <div class="brand-feature">📊 Real-time Analytics</div>
+                    <div class="brand-feature">📋 Application Management</div>
+                    <div class="brand-feature">🤖 AI Tuning Controls</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT LOGIN FORM -->
+        <div class="login-form-panel">
+            <form class="login-form" id="login-form" onsubmit="handleLogin(event)">
+                <h2>Welcome Back</h2>
+                <p class="login-subtitle">Sign in to access the admin dashboard</p>
+
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter username" required autocomplete="username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="show-password">
+                    <label for="show-password">Show Password</label>
+                </div>
+
+                <div class="form-error hidden" id="login-error"></div>
+
+                <button type="submit" class="btn-login" id="btn-login">Sign In</button>
+
+                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); text-align: center;">
+                    <p style="font-size: 0.8rem; color: var(--text-muted);">
+                        Default: <strong>admin</strong> / <strong>admin@123</strong>
+                    </p>
+                </div>
+
+                <a href="/" class="back-link">← Back to CredGen</a>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Toggle Password Visibility
+        document.getElementById('show-password').addEventListener('change', function() {
+            const passwordInput = document.getElementById('password');
+            passwordInput.type = this.checked ? 'text' : 'password';
+        });
+
+        // Check if already logged in
+        (function() {
+            const token = sessionStorage.getItem('admin_token');
+            if (token) {
+                fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(r => { if (r.ok) window.location.href = '/admin/dashboard'; })
+                    .catch(() => {});
+            }
+        })();
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const errorEl = document.getElementById('login-error');
+            const btn = document.getElementById('btn-login');
+            errorEl.classList.add('hidden');
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please fill in all fields';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Signing in...';
+
+            try {
+                const resp = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    sessionStorage.setItem('admin_token', data.access_token);
+                    sessionStorage.setItem('admin_refresh', data.refresh_token);
+                    sessionStorage.setItem('admin_user', data.username);
+                    sessionStorage.setItem('admin_role', data.role);
+                    window.location.href = '/admin/dashboard';
+                } else {
+                    const err = await resp.json();
+                    errorEl.textContent = err.message || 'Invalid credentials';
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorEl.textContent = 'Connection error. Please try again.';
+                errorEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Sign In';
+            }
+        }
+    </script>
+</body>
+</html>

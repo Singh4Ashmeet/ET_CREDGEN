@@ -1,222 +1,252 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CREDGEN AI – Loan Assistant Chatbot</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: #0a0a0a; color: #e5e7eb; line-height: 1.6; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
-        
-        /* Header */
-        header { background: #111111; padding: 20px 0; border-bottom: 1px solid #222; }
-        .header-content { display: flex; justify-content: space-between; align-items: center; }
-        .logo { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 600; color: #fff; text-decoration: none; }
-        .logo i { color: #4f46e5; }
-        .demo-btn { background: #4f46e5; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 500; }
-        .demo-btn:hover { background: #4338ca; }
-        
-        /* Hero */
-        .hero { padding: 80px 0; text-align: center; border-bottom: 1px solid #222; }
-        .hero h1 { font-size: 48px; font-weight: 700; margin-bottom: 20px; background: linear-gradient(90deg, #4f46e5, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .hero p { font-size: 18px; color: #9ca3af; max-width: 600px; margin: 0 auto 30px; }
-        
-        /* Sections */
-        section { padding: 60px 0; border-bottom: 1px solid #222; }
-        h2 { font-size: 32px; font-weight: 600; margin-bottom: 30px; color: #fff; }
-        h3 { font-size: 20px; font-weight: 600; margin-bottom: 10px; color: #fff; }
-        
-        /* What It Does */
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; }
-        .feature { background: #111111; padding: 25px; border-radius: 8px;  }
-        .feature i { color: #4f46e5; margin-bottom: 15px; font-size: 24px; }
-        
-        /* Integration */
-        .integration-code { background: #111111; padding: 25px; border-radius: 8px; border: 1px solid #333; margin: 30px 0; overflow-x: auto; }
-        .integration-code code { color: #a78bfa; font-family: monospace; font-size: 16px; line-height: 1.5; }
-        .integration-steps { margin: 30px 0; }
-        .step { margin-bottom: 20px; padding-left: 30px; position: relative; }
-        .step:before { content: counter(step); counter-increment: step; position: absolute; left: 0; top: 0; background: #4f46e5; color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-        .integration-steps { counter-reset: step; }
-        
-        /* CTA */
-        .cta { text-align: center; padding: 80px 0; }
-        .cta-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
-        
-        /* Footer */
-        footer { background: #111111; padding: 40px 0; text-align: center; }
-        .footer-links { display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; }
-        .footer-links a { color: #9ca3af; text-decoration: none; }
-        .footer-links a:hover { color: #fff; }
-        .copyright { color: #6b7280; font-size: 14px; }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 36px; }
-            h2 { font-size: 28px; }
-            .header-content { flex-direction: column; gap: 15px; }
-            .cta-buttons { flex-direction: column; align-items: center; }
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CredGen AI — Apply for a personal loan in minutes with our intelligent AI assistant.">
+    <title>CredGen AI — Smart Loan Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Header -->
-    <header>
-        <div class="container header-content">
-            <a href="#" class="logo">
-                <i class="fas fa-robot"></i>
-                CREDGEN AI
-            </a>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <a href="/widget.html" class="demo-btn" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-comments"></i> Live Demo
-                </a>
-                <a href="/bank/admin/login" class="demo-btn" target="_blank" rel="noopener noreferrer" style="background:#333; border:1px solid #444;">
-                    <i class="fas fa-user-shield"></i> Admin Login
-                </a>
-            </div>
-        </div>
-    </header>
 
-    <!-- Hero -->
-    <section class="hero">
-        <div class="container">
-            <h1>AI Loan Assistant Chatbot</h1>
-            <p>An intelligent chatbot that handles loan applications, document processing, fraud detection, and instant underwriting decisions for financial websites.</p>
-            <a href="/widget.html" class="demo-btn" target="_blank" rel="noopener noreferrer">
-                <i class="fas fa-play-circle"></i> Watch Demo
-            </a>
+<!-- ════════════════════════════════════════════════════════════════════
+     SECTION 1 — LANDING PAGE
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="landing-page">
+
+    <!-- NAVBAR -->
+    <nav class="navbar" id="navbar">
+        <div class="nav-brand">
+            <span class="nav-logo">CG</span>
+            <span class="nav-title">CredGen</span>
+        </div>
+        <div class="nav-links">
+            <a href="/status" class="nav-link" id="nav-track">Track Application</a>
+            <a href="/admin/login" class="nav-link nav-link-outline" id="nav-admin">Admin Login</a>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero" id="hero-section">
+        <div class="hero-content">
+            <span class="hero-badge">AI-Powered • Instant Decisions</span>
+            <h1 class="hero-title">Get Your Loan<br><span class="hero-highlight">In Minutes</span></h1>
+            <p class="hero-subtitle">CredGen's AI assistant guides you through the entire loan process — from application to approval — in a single conversation.</p>
+            <div class="hero-actions">
+                <button class="btn-primary btn-glow" id="cta-apply" onclick="startApplication()">
+                    Apply for a Loan
+                    <span class="btn-arrow">→</span>
+                </button>
+                <button class="btn-secondary" id="cta-learn" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">
+                    How It Works
+                </button>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="hero-card">
+                <div class="hero-card-header">
+                    <div class="hero-avatar">CG</div>
+                    <span>CredGen AI</span>
+                </div>
+                <div class="hero-card-body">
+                    <p class="typing-text">Hello! I'm CredGen, your AI loan assistant. Let's get you the best loan offer today...</p>
+                </div>
+            </div>
         </div>
     </section>
 
-    <!-- What It Does -->
-    <section class="container">
-        <br>
-        <h2>What CREDGEN AI Does</h2>
-        <div class="features-grid">
-            <div class="feature">
-                <i class="fas fa-comments"></i>
-                <h3>Conversational Loan Applications</h3>
-                <p>Guides users through loan applications with natural conversations, asking for necessary information and documents.</p>
+    <!-- HOW IT WORKS -->
+    <section class="section" id="how-it-works">
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">Four simple steps from application to approval</p>
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-number">01</div>
+                <div class="step-icon">💬</div>
+                <h3>Chat with AI</h3>
+                <p>Tell us about your loan needs in a natural conversation.</p>
             </div>
-            <div class="feature">
-                <i class="fas fa-file-upload"></i>
-                <h3>Document Processing</h3>
-                <p>Accepts and analyzes uploaded documents (ID, bank statements, income proofs) to extract relevant information.</p>
+            <div class="step-card">
+                <div class="step-number">02</div>
+                <div class="step-icon">🔍</div>
+                <h3>Instant Verification</h3>
+                <p>We verify your KYC and check your eligibility in seconds.</p>
             </div>
-            <div class="feature">
-                <i class="fas fa-shield-alt"></i>
-                <h3>Fraud Detection</h3>
-                <p>Real-time fraud detection algorithms flag suspicious applications to protect against fraudulent attempts.</p>
+            <div class="step-card">
+                <div class="step-number">03</div>
+                <div class="step-icon">💰</div>
+                <h3>Get Your Offer</h3>
+                <p>Receive a personalized loan offer with the best rates.</p>
             </div>
-            <div class="feature">
-                <i class="fas fa-bolt"></i>
-                <h3>Instant Underwriting</h3>
-                <p>Automated risk assessment and credit scoring for immediate preliminary loan decisions.</p>
-            </div>
-            <div class="feature">
-                <i class="fas fa-handshake"></i>
-                <h3>Loan Offers</h3>
-                <p>Generates personalized loan offers with terms, interest rates, and repayment plans based on risk profile.</p>
-            </div>
-            <div class="feature">
-                <i class="fas fa-file-contract"></i>
-                <h3>Document Generation</h3>
-                <p>Automatically creates sanction letters and loan agreements once terms are accepted.</p>
-            </div>
-        </div>
-        <br>
-    </section>
-    <!-- Integration -->
-    <section class="container">
-        <br>
-        <h2>How to Integrate</h2>
-        <p style="margin-bottom: 20px; color: #9ca3af;">Add our AI loan assistant to your website in 2 minutes with a single line of code.</p>
-        
-        <div class="integration-steps">
-            <div class="step">
-                <h3>Copy the Embed Code</h3>
-                <p style="color: #9ca3af;">Add this code before the closing &lt;/body&gt; tag of your website.</p>
-            </div>
-        </div>
-        <div class="integration-code">
-            <code>
-                &lt;!-- Embed CredGen AI Bot on your website --&gt;<br>
-                &lt;script src="https://credgen.com/widget-ui.js"&gt;&lt;/script&gt;<br>
-                &lt;script src="https://credgen.com/chat.js"&gt;&lt;/script&gt;
-            </code>
-        </div>
-        
-        
-        <div class="integration-steps">
-            <div class="step">
-                <h3>That's It</h3>
-                <p style="color: #9ca3af;">The chat widget will automatically appear on your site. Customize position and colors if needed.</p>
-            </div>
-        </div>
-        
-        <div style="margin-top: 30px;">
-            <a href="#!" class="demo-btn" id="copyBtn">
-                <i class="fas fa-copy"></i> Copy Embed Code
-            </a>
-        </div>
-        <br>
-    </section>
-    <!-- CTA -->
-    <section class="cta">
-        <div class="container">
-            <h2>Ready to Add AI Loan Assistance?</h2>
-            <p style="color: #9ca3af; max-width: 600px; margin: 0 auto 30px;">Join financial institutions using CREDGEN AI to streamline loan applications.</p>
-            <div class="cta-buttons">
-                <a href="/widget.html" class="demo-btn" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-play-circle"></i> Try Demo
-                </a>
-                <a href="mailto:contact@credgen.ai" class="demo-btn" style="background: #333; border: 1px solid #444;">
-                    <i class="fas fa-envelope"></i> Contact Us
-                </a>
+            <div class="step-card">
+                <div class="step-number">04</div>
+                <div class="step-icon">📄</div>
+                <h3>Download Letter</h3>
+                <p>Accept and download your sanction letter instantly.</p>
             </div>
         </div>
     </section>
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-links">
-                <a href="/widget.html">Demo</a>
-                <a href="#features">Features</a>
-                <a href="#integration">Integration</a>
-                <a href="mailto:contact@credgen.ai">Contact</a>
-            </div>
-            <p class="copyright">
-                &copy; 2025 CREDGEN AI. AI-powered loan assistant chatbot.
-            </p>
+
+    <!-- STATS -->
+    <section class="stats-bar">
+        <div class="stat"><span class="stat-value">₹50Cr+</span><span class="stat-label">Loans Sanctioned</span></div>
+        <div class="stat"><span class="stat-value">10K+</span><span class="stat-label">Happy Customers</span></div>
+        <div class="stat"><span class="stat-value">< 5 min</span><span class="stat-label">Avg. Decision Time</span></div>
+        <div class="stat"><span class="stat-value">99.9%</span><span class="stat-label">Uptime</span></div>
+    </section>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════
+     SECTION 2 — CHAT APPLICATION
+     ════════════════════════════════════════════════════════════════════ -->
+<div id="chat-app" class="chat-app hidden" style="display:none">
+
+    <!-- TOP BAR -->
+    <div class="chat-topbar">
+        <button class="btn-icon" id="btn-back" onclick="backToLanding()" title="Back to Home">
+            ← Back
+        </button>
+        <div class="topbar-center">
+            <span class="topbar-logo">CG</span>
+            <span class="topbar-title">CredGen AI</span>
+            <span class="topbar-status" id="topbar-status">Online</span>
         </div>
-    </footer>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const copyBtn = document.getElementById('copyBtn');
-            if (copyBtn) {
-                copyBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const embedCode = `
-<!-- Embed CredGen AI Bot on your website -->
-<script src="https://credgen.com/widget-ui.js"><\/script>
-<script src="https://credgen.com/chat.js"><\/script>
-`.trim();
-                    navigator.clipboard.writeText(embedCode).then(() => {
-                        const originalText = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-                        copyBtn.style.background = '#10b981';
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalText;
-                            copyBtn.style.background = '#4f46e5';
-                        }, 2000);
-                    });
-                });
-            }
-        });
-    </script>
+        <div class="topbar-actions">
+            <button class="btn-icon" id="btn-theme" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
+        </div>
+    </div>
+
+    <!-- PROGRESS TRACKER -->
+    <div class="progress-tracker" id="progress-tracker">
+        <div class="tracker-step active" data-step="0">
+            <div class="step-circle">1</div>
+            <span class="step-label">Details</span>
+        </div>
+        <div class="tracker-line"></div>
+        <div class="tracker-step" data-step="1">
+            <div class="step-circle">2</div>
+            <span class="step-label">KYC</span>
+        </div>
+        <div class="tracker-line"></div>
+        <div class="tracker-step" data-step="2">
+            <div class="step-circle">3</div>
+            <span class="step-label">Verification</span>
+        </div>
+        <div class="tracker-line"></div>
+        <div class="tracker-step" data-step="3">
+            <div class="step-circle">4</div>
+            <span class="step-label">Underwriting</span>
+        </div>
+        <div class="tracker-line"></div>
+        <div class="tracker-step" data-step="4">
+            <div class="step-circle">5</div>
+            <span class="step-label">Offer</span>
+        </div>
+        <div class="tracker-line"></div>
+        <div class="tracker-step" data-step="5">
+            <div class="step-circle">6</div>
+            <span class="step-label">Done</span>
+        </div>
+    </div>
+
+    <!-- MAIN CHAT LAYOUT -->
+    <div class="chat-layout">
+
+        <!-- CHAT MESSAGES -->
+        <div class="chat-main">
+            <div class="messages-container" id="messages-container">
+                <!-- Messages rendered by JS -->
+            </div>
+
+            <!-- TYPING INDICATOR -->
+            <div class="typing-indicator hidden" id="typing-indicator">
+                <div class="typing-avatar">CG</div>
+                <div class="typing-dots">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+
+            <!-- SUGGESTION CHIPS -->
+            <div class="chips-container hidden" id="chips-container">
+                <!-- Chips rendered by JS -->
+            </div>
+        </div>
+
+        <!-- CONTEXT PANEL (RIGHT) -->
+        <aside class="context-panel" id="context-panel">
+            <div class="panel-header">
+                <h3 id="panel-title">Application Progress</h3>
+            </div>
+            <div class="panel-body" id="panel-body">
+                <!-- Dynamic content filled by JS -->
+                <div class="panel-placeholder">
+                    <p>Your application details will appear here as we collect information.</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- INPUT AREA -->
+    <div class="input-area" id="input-area">
+        <div class="input-wrapper">
+            <button class="btn-icon attach-btn" id="btn-attach" title="Attach Document">📎</button>
+            <textarea id="user-input" class="user-input" placeholder="Type your message..." rows="1"
+                      maxlength="1000"></textarea>
+            <span class="char-counter" id="char-counter">0/1000</span>
+            <button class="btn-send" id="btn-send" onclick="sendMessage()" title="Send">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </div>
+        <div class="input-extras">
+            <button class="btn-text" id="btn-calc" onclick="toggleCalculator()">₹ Calculator</button>
+            <div class="input-hint hidden" id="input-hint"></div>
+        </div>
+    </div>
+
+    <!-- EMI CALCULATOR (HIDDEN BY DEFAULT) -->
+    <div class="calculator-panel hidden" id="calculator-panel">
+        <div class="calc-header">
+            <h4>EMI Calculator</h4>
+            <button class="btn-icon" onclick="toggleCalculator()">✕</button>
+        </div>
+        <div class="calc-body">
+            <div class="calc-field">
+                <label>Loan Amount: ₹<span id="calc-amount-val">5,00,000</span></label>
+                <input type="range" id="calc-amount" min="50000" max="5000000" step="10000" value="500000">
+            </div>
+            <div class="calc-field">
+                <label>Interest Rate: <span id="calc-rate-val">12.0</span>%</label>
+                <input type="range" id="calc-rate" min="8" max="24" step="0.5" value="12">
+            </div>
+            <div class="calc-field">
+                <label>Tenure: <span id="calc-tenure-val">36</span> months</label>
+                <input type="range" id="calc-tenure" min="12" max="60" step="6" value="36">
+            </div>
+            <div class="calc-result">
+                <div class="calc-emi">
+                    <span>Monthly EMI</span>
+                    <strong id="calc-emi">₹0</strong>
+                </div>
+                <div class="calc-total">
+                    <span>Total Payable</span>
+                    <strong id="calc-total">₹0</strong>
+                </div>
+                <div class="calc-interest">
+                    <span>Total Interest</span>
+                    <strong id="calc-interest">₹0</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script src="chat.js"></script>
 </body>
 </html>

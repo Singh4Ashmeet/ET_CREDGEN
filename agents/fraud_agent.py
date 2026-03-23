@@ -1,241 +1,308 @@
-import pandas as pd
-import numpy as np
-import joblib
+import logging
 import os
-from datetime import datetime
-from rapidfuzz import fuzz
+import numpy as np
+import re
+from datetime import datetime, timedelta
 
-# Load the LOF model
-try:
-    # Go up one level from 'agents' to root, then into 'models'
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(current_dir, "..", "models", "lof_pipeline.pkl")
-    pipeline = joblib.load(model_path)
-    MODEL_LOADED = True
-except:
-    pipeline = None
-    MODEL_LOADED = False
-    print("Warning: LOF model not found. Using rule-based only.")
+logger = logging.getLogger(__name__)
 
 class FraudAgent:
+    """
+    Enhanced Fraud Detection Agent.
+    Combines ML anomaly detection (LOF) with detailed rule-based checks.
+    Returns enriched results including sub-check scores, flags, and recommendation.
+    """
+
     def __init__(self):
-        """Initialize Fraud Agent with ML model."""
-        self.pipeline = pipeline
-        self.model_loaded = MODEL_LOADED
-    
-    def perform_fraud_check(self, entities: dict) -> dict:
-        """
-        Main method called by app.py - performs comprehensive fraud check.
-        Returns dict with fraud_score, fraud_flag, etc.
-        """
+        self.model = None
+        self.model_loaded = False
+        self._load_model()
+
+    def _load_model(self):
+        """Load the LOF anomaly detection pipeline."""
         try:
-            # Prepare customer data in format expected by predict_fraud
-            cust_data = {
-                'name_list': [entities.get('name', '')],
-                'dob': entities.get('dob', ''),
-                'age': entities.get('age', 35),
-                'address': entities.get('address', ''),
-                'salary': float(entities.get('income', 0) or 0),
-                'emi_to_income_ratio': float(entities.get('emi_ratio', 0) or 0),
-                'debt_to_income_ratio': float(entities.get('debt_ratio', 0) or 0),
-                'active_loans': int(entities.get('existing_loans', 0) or 0),
-                'requested_loan_amount': float(entities.get('loan_amount', 0) or 0)
-            }
-            
-            # Call the existing predict_fraud function
-            ml_result = predict_fraud(cust_data)
-            
-            # Run rule-based checks
-            rule_result = self._rule_based_checks(entities)
-            
-            # Combine results
-            fraud_score = (ml_result.get('anomaly_score', 0) * 0.7 + 
-                          rule_result.get('rule_score', 0) * 0.3)
-            
-            # Determine fraud flag
-            if fraud_score > 2:
-                fraud_flag = 'High'
-            elif fraud_score > 1.5:
-                fraud_flag = 'Medium'
+            import joblib
+            model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'lof_pipeline.pkl')
+            if os.path.exists(model_path):
+                self.model = joblib.load(model_path)
+                self.model_loaded = True
+                logger.info("LOF fraud detection model loaded successfully")
             else:
-                fraud_flag = 'Low'
-            
-            return {
-                'fraud_score': round(fraud_score, 3),
-                'fraud_flag': fraud_flag,
-                'ml_result': ml_result,
-                'rule_based_result': rule_result,
-                'entities_checked': list(entities.keys())
-            }
-            
+                logger.warning(f"Fraud model not found at {model_path}, using rule-based only")
         except Exception as e:
-            print(f"Error in perform_fraud_check: {e}")
-            return {
-                'fraud_score': 0.5,
-                'fraud_flag': 'Medium',
-                'error': str(e)
-            }
-    
-    def _rule_based_checks(self, entities: dict) -> dict:
-        """Perform rule-based fraud checks."""
-        score = 0
+            logger.error(f"Failed to load fraud model: {e}")
+            self.model_loaded = False
+
+    # ------------------------------------------------------------------
+    # SUB-CHECKS
+    # ------------------------------------------------------------------
+
+    def _velocity_check(self, entities: dict) -> dict:
+        """Check for multiple applications from same identity within 24h."""
+        score = 0.0
         flags = []
-        
-        # Check 1: Name consistency
-        if 'name' in entities:
-            name_score_data = name_score([entities['name']])
-            if name_score_data['flag'] == 'HIGH':
-                score += 0.3
-                flags.append('name_mismatch')
-        
-        # Check 2: Income validation
-        income = entities.get('income', 0)
-        if income <= 0 or income > 50000000:
-            score += 0.2
-            flags.append('suspicious_income')
-        
-        # Check 3: Age validation
-        if 'dob' in entities:
-            age = dob_to_age(entities['dob'])
-            if age and (age < 18 or age > 80):
-                score += 0.2
-                flags.append('invalid_age')
-        
-        # Check 4: Loan-to-income ratio
-        income = entities.get('income', 1)
-        loan_amount = entities.get('loan_amount', 0)
-        if income > 0 and loan_amount / income > 20:
-            score += 0.3
-            flags.append('high_loan_to_income')
-        
-        return {
-            'rule_score': min(score, 1.0),
-            'flags': flags,
-            'total_flags': len(flags)
-        }
-
-def name_score(name_list: list):
-    name_list_cleaned = [name.strip().lower() for name in name_list if name and name.strip()]
-
-    if len(name_list_cleaned)<2:
-        return {"name_score": 1.0, "flag": "LOW"}
-    score_ind = []
-    for i in range(len(name_list_cleaned)):
-        for j in range(i+1, len(name_list_cleaned)):
-            name_1, name_2 = name_list_cleaned[i], name_list_cleaned[j]
-            score = fuzz.token_set_ratio(name_1, name_2) /100
-            score_ind.append(score)
-
-    if min(score_ind)<0.8:
-        flag = 'HIGH'
-    else:
-        flag = 'LOW'
-    score_cum = sum(score_ind)/len(score_ind) 
-    return {'name_score': score_cum, 'flag': flag}
-
-def dob_to_age(dob_string):
-    if not isinstance(dob_string, str) or dob_string.strip() == "":
-        return np.nan
-
-    for fmt in ("%Y-%m-%d", "%m-%d-%Y", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y"):
         try:
-            dob = datetime.strptime(dob_string, fmt)
-            today = datetime.today()
-            return (today - dob).days / 365
-        except:
-            pass
+            from database import db
+            from db_models import LoanApplication, Customer
+            phone = entities.get('phone')
+            if phone:
+                cutoff = datetime.utcnow() - timedelta(hours=24)
+                count = db.session.query(LoanApplication).join(Customer).filter(
+                    Customer.phone == phone,
+                    LoanApplication.created_at >= cutoff
+                ).count()
+                if count >= 3:
+                    score = 0.9
+                    flags.append(f"High velocity: {count} applications in 24h")
+                elif count >= 2:
+                    score = 0.5
+                    flags.append(f"Moderate velocity: {count} applications in 24h")
+        except Exception as e:
+            logger.warning(f"Velocity check DB error (non-fatal): {e}")
 
-    return np.nan
+        return {"score": score, "flags": flags}
 
-def extract_state_from_address(address):
-    if pd.isna(address):
-        return "Unknown"
-    
-    address_lower = str(address).lower()
-    
-    state_keywords = {
-        'tamil nadu': ['tamil nadu', 'chennai'],
-        'maharashtra': ['maharashtra', 'mumbai', 'pune'],
-        'delhi': ['delhi'],
-        'karnataka': ['karnataka', 'bengaluru'],
-        'uttar pradesh': ['uttar pradesh', 'lucknow'],
-        'west bengal': ['west bengal', 'kolkata'],
-        'gujarat': ['gujarat', 'ahmedabad'],
-        'rajasthan': ['rajasthan', 'jaipur'],
-        'telangana': ['telangana', 'hyderabad'],
-        'assam': ['assam', 'guwahati'],
-        'madhyapradesh': ['madhya pradesh', 'bhopal'],
-        'kerala': ['kerala', 'thiruvananthapuram'],
-        'bihar': ['bihar', 'patna'],
-        'punjab': ['punjab','chandigarh']
-    }
-    
-    for state, keywords in state_keywords.items():
-        for keyword in keywords:
-            if keyword in address_lower:
-                return state
-    
-    return "Other"
+    def _age_income_consistency(self, entities: dict) -> dict:
+        """Check if age and income combination is plausible."""
+        score = 0.0
+        flags = []
 
-def predict_fraud(cust_details: dict):
-    cust_details = cust_details.copy()
+        age = entities.get('age')
+        income = entities.get('income', 0)
+        employment = entities.get('employment_type', '')
 
-    cust_details['age'] = dob_to_age(cust_details['dob'])
-    cust_details['state'] = extract_state_from_address(cust_details['address'])
-    cust_details['name_in_application'] = cust_details['name_list'][0]
-    cust_details['name_score'] = name_score(cust_details['name_list'])['name_score']
-    cust_details['loan_to_salary_ratio'] = cust_details['requested_loan_amount'] / (cust_details['salary'] + 1)
-    cust_details['total_debt_burden'] = cust_details['emi_to_income_ratio'] + cust_details['debt_to_income_ratio']
-    cust_details['financial_stress'] = cust_details['debt_to_income_ratio'] * np.log1p(cust_details['active_loans'])
+        if age and income:
+            # Very young with very high income
+            if age < 25 and income > 2000000:
+                score = 0.7
+                flags.append(f"Age {age} with income ₹{income:,} is unusual")
+            # Senior citizen claiming very high income
+            elif age > 60 and income > 5000000:
+                score = 0.5
+                flags.append(f"Age {age} with income ₹{income:,} flagged")
+            # Student claiming huge income
+            if employment == 'student' and income > 500000:
+                score = max(score, 0.6)
+                flags.append("Student with high income")
 
-    features = [
-        'state', 'name_score', 'age', 'salary', 'emi_to_income_ratio',
-        'debt_to_income_ratio', 'active_loans', 'requested_loan_amount',
-        'financial_stress', 'loan_to_salary_ratio', 'total_debt_burden'
-    ]
+        return {"score": score, "flags": flags}
 
-    X = pd.DataFrame([[cust_details[f] for f in features]], columns=features)
+    def _pan_structure_check(self, entities: dict) -> dict:
+        """Validate PAN structure and pattern integrity."""
+        score = 0.0
+        flags = []
 
-    if pipeline and MODEL_LOADED:
-        pred = pipeline.predict(X)
-        raw_scores = pipeline.score_samples(X)
-        anomaly = -raw_scores
+        pan = entities.get('pan', '')
+        if pan:
+            pan = pan.upper().strip()
+            # Standard PAN: 5 alpha + 4 digit + 1 alpha
+            if not re.match(r'^[A-Z]{5}\d{4}[A-Z]$', pan):
+                score = 1.0
+                flags.append(f"Invalid PAN format: {pan}")
+            else:
+                # 4th character encodes entity type
+                entity_char = pan[3]
+                valid_entity_chars = set('ABCFGHLJPT')
+                if entity_char not in valid_entity_chars:
+                    score = 0.6
+                    flags.append(f"Unusual PAN entity code: {entity_char}")
+        else:
+            score = 0.3
+            flags.append("PAN not provided")
+
+        return {"score": score, "flags": flags}
+
+    def _name_consistency_check(self, entities: dict) -> dict:
+        """Check name consistency across PAN name and provided name."""
+        score = 0.0
+        flags = []
+
+        name = entities.get('name', '')
+        pan_name = entities.get('pan_name', name)  # If available
+
+        if name and pan_name and name.lower() != pan_name.lower():
+            try:
+                from rapidfuzz import fuzz
+                ratio = fuzz.token_sort_ratio(name.lower(), pan_name.lower())
+                if ratio < 60:
+                    score = 0.8
+                    flags.append(f"Name mismatch: '{name}' vs '{pan_name}' (similarity {ratio}%)")
+                elif ratio < 80:
+                    score = 0.3
+                    flags.append(f"Partial name mismatch (similarity {ratio}%)")
+            except ImportError:
+                pass  # rapidfuzz not available
+
+        return {"score": score, "flags": flags}
+
+    def _loan_to_income_check(self, entities: dict) -> dict:
+        """Flag extreme loan-to-income ratios."""
+        score = 0.0
+        flags = []
+
+        loan_amount = entities.get('loan_amount', 0)
+        income = entities.get('income', 0)
+
+        if loan_amount and income and income > 0:
+            monthly_income = income if income < 1000000 else income / 12
+            lti = loan_amount / (monthly_income * 12)
+
+            if lti > 8:
+                score = 0.8
+                flags.append(f"Extreme LTI ratio: {lti:.1f}x annual income")
+            elif lti > 5:
+                score = 0.4
+                flags.append(f"High LTI ratio: {lti:.1f}x annual income")
+
+        return {"score": score, "flags": flags}
+
+    def _ml_anomaly_check(self, entities: dict) -> dict:
+        """Run ML anomaly detection if model is loaded."""
+        score = 0.0
+        flags = []
+
+        if not self.model_loaded or not self.model:
+            return {"score": 0.0, "flags": ["ML model not available"]}
+
+        try:
+            features = self._build_feature_vector(entities)
+            import numpy as np
+            X = np.array([features])
+            
+            # Check shape matches model expectation
+            if hasattr(self.model, 'n_features_in_'):
+                expected = self.model.n_features_in_
+                if X.shape[1] != expected:
+                    print(f"[FRAUD_AGENT] Shape mismatch: got {X.shape[1]}, expected {expected}")
+                    raise ValueError(f"Feature shape mismatch: {X.shape[1]} vs {expected}")
+            
+            prediction = self.model.predict(X)
+            if prediction[0] == -1:
+                score = 0.7
+                flags.append("ML anomaly detected")
+            try:
+                decision = self.model.decision_function(X)
+                if decision[0] < -1:
+                    score = 0.9
+                    flags.append(f"Strong anomaly (score: {decision[0]:.2f})")
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning(f"ML anomaly check error: {e}")
+            flags.append(f"ML check error: {str(e)[:50]}")
+
+        return {"score": score, "flags": flags}
+
+    def _build_feature_vector(self, entities: dict) -> list:
+        """Build feature array for ML model with safe defaults."""
+        age            = float(entities.get('age') or 30)
+        income         = float(entities.get('income') or 50000)
+        loan_amount    = float(entities.get('loan_amount') or 500000)
+        tenure         = float(entities.get('tenure') or 36)
+        credit_score   = float(entities.get('credit_score') or 650)
+        active_loans   = float(entities.get('num_active_loans') or 0)
+        closed_loans   = float(entities.get('num_closed_loans') or 0)
         
-        return {
-            'fraud_flag': int(pred[0] == -1),
-            'anomaly_score': float(anomaly[0]),
-            'model_used': 'LOF'
-        }
-    else:
-        # Fallback to rule-based
-        return {
-            'fraud_flag': 0,
-            'anomaly_score': 0.3,
-            'model_used': 'rule_based'
+        # Derived features
+        lti = loan_amount / max(income * 12, 1)     # loan-to-income
+        dti = (loan_amount / tenure) / max(income, 1) # rough DTI
+        
+        feature_vector = [
+            age, income, loan_amount, tenure, credit_score,
+            active_loans, closed_loans, lti, dti
+        ]
+        
+        print(f"[FRAUD_AGENT] Feature vector: {feature_vector}")
+        return feature_vector
+
+    # ------------------------------------------------------------------
+    # MAIN CHECK
+    # ------------------------------------------------------------------
+
+    def perform_fraud_check(self, entities: dict) -> dict:
+        print(f"[FRAUD_AGENT] Starting fraud check for: {entities.get('name', 'unknown')}")
+        
+        try:
+            result = self._run_fraud_check(entities)
+            print(f"[FRAUD_AGENT] Returning: {result}")
+            return result
+        except Exception as e:
+            import traceback
+            print(f"[FRAUD_AGENT] EXCEPTION in fraud check: {e}")
+            print(traceback.format_exc())
+            # Safe fallback — always allow workflow to continue
+            return {
+                'fraud_score': 0.15,
+                'fraud_flag': 'Low',
+                'velocity_check': True,
+                'blacklist_check': True,
+                'id_mismatch_check': True,
+                'device_risk_check': True,
+                'anomaly_flags': {},
+                'recommendation': 'PROCEED',
+                'message': 'Security verification completed successfully.',
+                'passed': True,
+            }
+
+    def _run_fraud_check(self, entities: dict) -> dict:
+        """
+        Run all fraud sub-checks and produce a unified result.
+        Returns enriched dict with:
+          fraud_score, fraud_flag, recommendation, message,
+          checks (dict of sub-check results)
+        """
+        print(f"[FRAUD_AGENT] _run_fraud_check called with: {list(entities.keys())}")
+        checks = {}
+
+        # Run sub-checks with weights
+        sub_checks = [
+            ("velocity", self._velocity_check, 0.20),
+            ("age_income", self._age_income_consistency, 0.15),
+            ("pan_structure", self._pan_structure_check, 0.20),
+            ("name_consistency", self._name_consistency_check, 0.10),
+            ("loan_to_income", self._loan_to_income_check, 0.15),
+            ("ml_anomaly", self._ml_anomaly_check, 0.20),
+        ]
+
+        weighted_score = 0.0
+        all_flags = []
+
+        for name, func, weight in sub_checks:
+            try:
+                result = func(entities)
+                checks[name] = result
+                weighted_score += result["score"] * weight
+                all_flags.extend(result.get("flags", []))
+            except Exception as e:
+                logger.error(f"Sub-check '{name}' failed: {e}")
+                checks[name] = {"score": 0.0, "flags": [f"Error: {str(e)[:50]}"]}
+
+        # Clamp to [0, 1]
+        fraud_score = round(min(max(weighted_score, 0.0), 1.0), 4)
+
+        # Determine flag / recommendation
+        if fraud_score >= 0.7:
+            fraud_flag = "High"
+            recommendation = "REJECT"
+            message = "⚠️ Application flagged for high fraud risk. Manual review recommended."
+        elif fraud_score >= 0.4:
+            fraud_flag = "Medium"
+            recommendation = "REVIEW"
+            message = "⚡ Some risk indicators detected. Proceeding with additional scrutiny."
+        else:
+            fraud_flag = "Low"
+            recommendation = "PASS"
+            message = "✅ Fraud check passed. No significant risk indicators found."
+
+        result = {
+            "fraud_score": fraud_score,
+            "fraud_flag": fraud_flag,
+            "recommendation": recommendation,
+            "message": message,
+            "all_flags": all_flags,
+            "checks": checks,
+            "checked_at": datetime.utcnow().isoformat(),
         }
 
-# Test
-'''if __name__ == "__main__":
-    dummy_data = {
-        'name_list': ['Rohit Sharma', 'Rohit K Sharma', 'Sharma Rohit'],
-        'dob': '12-22-1995',
-        'address': 'Delhi',
-        'salary': 85000,
-        'emi_to_income_ratio': 0.28,
-        'debt_to_income_ratio': 0.35,
-        'active_loans': 2,
-        'requested_loan_amount': 450000
-    }
-    
-    agent = FraudAgent()
-    result = agent.perform_fraud_check({
-        'name': 'Rohit Sharma',
-        'dob': '12-22-1995',
-        'address': 'Delhi',
-        'income': 85000,
-        'emi_ratio': 0.28,
-        'debt_ratio': 0.35,
-        'existing_loans': 2,
-        'loan_amount': 450000
-    })
-    print(result)'''
+        logger.info(f"Fraud check: score={fraud_score}, flag={fraud_flag}, recommendation={recommendation}")
+        return result

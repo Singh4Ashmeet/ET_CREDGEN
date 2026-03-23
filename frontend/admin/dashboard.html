@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — CredGen Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body class="dashboard-page">
+    <!-- AUTH GUARD -->
+    <script src="auth-guard.js"></script>
+
+    <div class="dash-layout">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="sidebar-logo">CG</span>
+                <span class="sidebar-title">CredGen</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+                    📊 Dashboard
+                </button>
+                <button class="nav-item" data-tab="applications" onclick="switchTab('applications')">
+                    📋 Applications
+                </button>
+                <button class="nav-item" data-tab="tuning" onclick="switchTab('tuning')">
+                    🤖 AI Tuning
+                </button>
+                <button class="nav-item" data-tab="settings" onclick="switchTab('settings')">
+                    ⚙️ Settings
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <span id="sidebar-user">admin</span>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT -->
+        <main class="dash-main">
+            <!-- DASHBOARD TAB -->
+            <section class="tab-content active" id="tab-dashboard">
+                <div class="tab-header">
+                    <h2>Dashboard</h2>
+                    <span class="tab-date" id="dash-date"></span>
+                </div>
+
+                <!-- KPI CARDS -->
+                <div class="kpi-grid" id="kpi-grid">
+                    <div class="kpi-card"><span class="kpi-value" id="kpi-total">—</span><span class="kpi-label">Total Applications</span></div>
+                    <div class="kpi-card accent"><span class="kpi-value" id="kpi-approved">—</span><span class="kpi-label">Approved Today</span></div>
+                    <div class="kpi-card danger"><span class="kpi-value" id="kpi-rejected">—</span><span class="kpi-label">Rejected Today</span></div>
+                    <div class="kpi-card"><span class="kpi-value" id="kpi-rate">—</span><span class="kpi-label">Approval Rate</span></div>
+                </div>
+
+                <!-- CHARTS -->
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h4>Applications by Status</h4>
+                        <canvas id="chart-status" height="260"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h4>Daily Trend (30 days)</h4>
+                        <canvas id="chart-daily" height="260"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- APPLICATIONS TAB -->
+            <section class="tab-content" id="tab-applications">
+                <div class="tab-header">
+                    <h2>Applications</h2>
+                    <div class="tab-actions">
+                        <select id="filter-status" onchange="applyStatusFilter()">
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="initiated">Initiated</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="sanctioned">Sanctioned</option>
+                            <option value="disbursed">Disbursed</option>
+                        </select>
+                        <button class="btn-export" onclick="exportCSV()">📥 Export CSV</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="apps-table">
+                        <thead>
+                            <tr><th>Customer</th><th>Amount</th><th>Status</th><th>Type</th><th>Date</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="apps-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination"></div>
+            </section>
+
+            <!-- AI TUNING TAB -->
+            <section class="tab-content" id="tab-tuning">
+                <div class="tab-header"><h2>AI Tuning</h2></div>
+                <div class="tuning-form">
+                    <label>Bank Context / Policy Rules</label>
+                    <textarea id="tuning-content" rows="10" placeholder="Enter bank-specific policies, context, or tuning instructions..."></textarea>
+                    <button class="btn-primary" onclick="saveTuning()" style="margin-top:1rem">Save Context</button>
+                    <p class="tuning-msg hidden" id="tuning-msg"></p>
+                </div>
+            </section>
+
+            <!-- SETTINGS TAB -->
+            <section class="tab-content" id="tab-settings">
+                <div class="tab-header"><h2>Settings</h2></div>
+                <div class="settings-form">
+                    <h3>Change Password</h3>
+                    <div class="form-group">
+                        <label>Current Password</label>
+                        <input type="password" id="old-password">
+                    </div>
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" id="new-password">
+                    </div>
+                    <button class="btn-primary" onclick="changePassword()">Update Password</button>
+                    <p class="settings-msg hidden" id="settings-msg"></p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>

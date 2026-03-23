@@ -6,7 +6,7 @@ from flask_jwt_extended import (
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from database import db
-from models import AdminUser, RevokedToken
+from db_models import AdminUser, RevokedToken
 from datetime import datetime
 import os
 
@@ -97,3 +97,32 @@ def me():
         "email": user.email,
         "role": user.role
     }), 200
+
+@auth_bp.route('/change-password', methods=['PUT'])
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    user = AdminUser.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    data = request.get_json()
+    old_password = data.get('old_password', '')
+    new_password = data.get('new_password', '')
+
+    if not old_password or not new_password:
+        return jsonify({"message": "Both old and new passwords are required"}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"message": "New password must be at least 8 characters"}), 400
+
+    if not user.check_password(old_password):
+        return jsonify({"message": "Current password is incorrect"}), 401
+
+    try:
+        user.set_password(new_password)
+        db.session.commit()
+        return jsonify({"message": "Password changed successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"message": "Failed to change password"}), 500

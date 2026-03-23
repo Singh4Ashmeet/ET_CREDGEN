@@ -3,11 +3,37 @@ from datetime import datetime, timedelta
 import uuid
 import json
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
+from sqlalchemy import JSON, String, Integer, SmallInteger, Numeric, Date, Boolean, DateTime, Text, BigInteger, ForeignKey
+from sqlalchemy.orm import relationship
+
+# Mock PostgreSQL specific types for SQLite compatibility
+from sqlalchemy import JSON, String
+import os
+
+if "sqlite" in str(os.getenv("DATABASE_URL", "")).lower() or not os.getenv("DATABASE_URL"):
+    class UUID(String):
+        def __init__(self, *args, **kwargs):
+            super().__init__(36)
+    class JSONB(JSON):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+    class INET(String):
+        def __init__(self, *args, **kwargs):
+            super().__init__(45)
+else:
+    try:
+        from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
+    except ImportError:
+        class UUID(String):
+            def __init__(self, *args, **kwargs): super().__init__(36)
+        class JSONB(JSON):
+            def __init__(self, *args, **kwargs): super().__init__()
+        class INET(String):
+            def __init__(self, *args, **kwargs): super().__init__(45)
 
 class Customer(db.Model):
     __tablename__ = 'customers'
-    customer_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    customer_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(255), nullable=False)
     age = db.Column(db.SmallInteger)
     gender = db.Column(db.String(20))
@@ -25,7 +51,7 @@ class Customer(db.Model):
 
 class LoanApplication(db.Model):
     __tablename__ = 'loan_applications'
-    application_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    application_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     customer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('customers.customer_id'))
     loan_type = db.Column(db.String(50))
     loan_amount = db.Column(db.Numeric(15, 2), nullable=False)
@@ -63,7 +89,7 @@ class LoanApplication(db.Model):
 
 class KYCRecord(db.Model):
     __tablename__ = 'kyc_records'
-    kyc_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    kyc_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'), unique=True)
     customer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('customers.customer_id'))
     pan_no = db.Column(db.String(10), nullable=False)
@@ -87,7 +113,7 @@ class KYCRecord(db.Model):
 
 class LoanHistory(db.Model):
     __tablename__ = 'loan_history'
-    history_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    history_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     customer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('customers.customer_id'))
     lender_name = db.Column(db.String(255))
     loan_type = db.Column(db.String(50))
@@ -114,7 +140,7 @@ class LoanHistory(db.Model):
 
 class DeviceMetadata(db.Model):
     __tablename__ = 'device_metadata'
-    device_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    device_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = db.Column(db.String(64), nullable=False)
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'))
     ip_address = db.Column(INET)
@@ -136,7 +162,7 @@ class DeviceMetadata(db.Model):
 
 class FraudCheck(db.Model):
     __tablename__ = 'fraud_checks'
-    fraud_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    fraud_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'), unique=True)
     fraud_score = db.Column(db.Numeric(5, 4), nullable=False)
     fraud_flag = db.Column(db.String(10))
@@ -152,7 +178,7 @@ class FraudCheck(db.Model):
 
 class UnderwritingResult(db.Model):
     __tablename__ = 'underwriting_results'
-    underwriting_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    underwriting_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'), unique=True)
     risk_score = db.Column(db.Numeric(5, 4), nullable=False)
     risk_band = db.Column(db.String(10))
@@ -169,7 +195,7 @@ class UnderwritingResult(db.Model):
 
 class LoanOffer(db.Model):
     __tablename__ = 'loan_offers'
-    offer_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    offer_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'))
     loan_amount = db.Column(db.Numeric(15, 2), nullable=False)
     interest_rate = db.Column(db.Numeric(5, 2), nullable=False)
@@ -189,7 +215,7 @@ class LoanOffer(db.Model):
 
 class Document(db.Model):
     __tablename__ = 'documents'
-    document_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    document_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'))
     document_type = db.Column(db.String(50))
     filename = db.Column(db.String(255), nullable=False)
@@ -204,7 +230,7 @@ class Document(db.Model):
 
 class SanctionLetter(db.Model):
     __tablename__ = 'sanction_letters'
-    letter_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    letter_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'), unique=True)
     offer_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_offers.offer_id'))
     sanction_number = db.Column(db.String(30), unique=True, nullable=False)
@@ -223,7 +249,7 @@ class SanctionLetter(db.Model):
 
 class ChatSession(db.Model):
     __tablename__ = 'chat_sessions'
-    session_id = db.Column(db.String(64), PRIMARY KEY=True)
+    session_id = db.Column(db.String(64), primary_key=True)
     application_id = db.Column(UUID(as_uuid=True), db.ForeignKey('loan_applications.application_id'))
     state = db.Column(JSONB, nullable=False, default={})
     stage = db.Column(db.String(50))
@@ -235,6 +261,9 @@ class ChatSession(db.Model):
 
     application = db.relationship('LoanApplication', back_populates='chat_sessions')
     logs = db.relationship('ChatLog', back_populates='session')
+    processing_jobs = db.relationship('ProcessingJob', back_populates='session')
+
+    failure_count = db.Column(db.Integer, default=0) # For retry logic
 
     def get_state(self):
         return self.state
@@ -249,9 +278,22 @@ class ChatSession(db.Model):
     def is_expired(self):
         return self.expires_at < datetime.utcnow()
 
+class ProcessingJob(db.Model):
+    __tablename__ = 'processing_jobs'
+    job_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = db.Column(db.String(64), db.ForeignKey('chat_sessions.session_id'), nullable=False)
+    type = db.Column(db.String(50))  # fraud, underwriting, documentation
+    status = db.Column(db.String(20), default='pending')  # pending, processing, done, failed
+    result = db.Column(JSONB)
+    error = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = db.relationship('ChatSession', back_populates='processing_jobs')
+
 class ChatLog(db.Model):
     __tablename__ = 'chat_logs'
-    log_id = db.Column(db.BigInteger, PRIMARY KEY=True, autoincrement=True)
+    log_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = db.Column(db.String(64), db.ForeignKey('chat_sessions.session_id'))
     event_type = db.Column(db.String(50))
     message_role = db.Column(db.String(20))
@@ -264,7 +306,7 @@ class ChatLog(db.Model):
 
 class AdminUser(db.Model):
     __tablename__ = 'admin_users'
-    user_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     username = db.Column(db.String(64), unique=True, nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.Text, nullable=False)
@@ -301,7 +343,7 @@ class AdminUser(db.Model):
 
 class RevokedToken(db.Model):
     __tablename__ = 'revoked_tokens'
-    id = db.Column(db.Integer, PRIMARY KEY=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     jti = db.Column(db.String(120), unique=True, nullable=False)
     revoked_at = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
 
@@ -311,7 +353,7 @@ class RevokedToken(db.Model):
 
 class TuningContent(db.Model):
     __tablename__ = 'tuning_content'
-    content_id = db.Column(UUID(as_uuid=True), PRIMARY KEY=True, default=uuid.uuid4)
+    content_id = db.Column(UUID(as_uuid=True), primary_key=True, default=lambda: str(uuid.uuid4()))
     admin_id = db.Column(UUID(as_uuid=True), db.ForeignKey('admin_users.user_id'))
     type = db.Column(db.String(50))
     content = db.Column(db.Text, nullable=False)

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CredGen Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        .admin-container { display: flex; height: 100vh; background: var(--bg-light); }
+        .sidebar { width: 250px; background: var(--bg-card); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 20px; font-weight: bold; border-bottom: 1px solid var(--border); color: var(--primary); }
+        .nav-items { flex: 1; padding: 20px 0; }
+        .nav-item { display: block; padding: 12px 20px; color: var(--text-main); text-decoration: none; cursor: pointer; transition: background 0.2s; }
+        .nav-item:hover, .nav-item.active { background: var(--bg-light); color: var(--primary); border-left: 3px solid var(--primary); }
+        
+        .main-content { flex: 1; overflow-y: auto; padding: 30px; }
+        .section { display: none; }
+        .section.active { display: block; }
+        
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); }
+        .kpi-value { font-size: 1.8rem; font-weight: 700; margin: 10px 0; }
+        .kpi-label { color: var(--text-muted); font-size: 0.9rem; }
+        
+        .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .chart-card { background: var(--bg-card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); height: 350px; }
+        
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 12px; overflow: hidden; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--bg-light); font-weight: 600; color: var(--text-muted); }
+        tr:hover { background: var(--bg-light); cursor: pointer; }
+        
+        .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+        .status-approved { background: #dcfce7; color: #166534; }
+        .status-rejected { background: #fee2e2; color: #991b1b; }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: flex-end; }
+        .modal.open { display: flex; }
+        .slide-panel { width: 500px; background: var(--bg-card); padding: 30px; overflow-y: auto; animation: slideIn 0.3s; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        .detail-label { color: var(--text-muted); }
+        .chat-log { background: var(--bg-light); padding: 15px; border-radius: 8px; max-height: 300px; overflow-y: auto; margin-top: 20px; }
+        .chat-entry { margin-bottom: 10px; font-size: 0.9rem; }
+        .chat-entry.bot { color: var(--primary); }
+        .chat-entry.user { color: var(--text-main); text-align: right; }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">CredGen Admin</div>
+            <nav class="nav-items">
+                <a class="nav-item active" data-target="dashboard">Dashboard</a>
+                <a class="nav-item" data-target="applications">Applications</a>
+                <a class="nav-item" data-target="tuning">Tuning</a>
+                <a class="nav-item" href="/">Logout</a>
+            </nav>
+        </aside>
+        
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="section active">
+                <h2>Dashboard</h2>
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Applications</div>
+                        <div class="kpi-value" id="kpi-total">0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Approval Rate</div>
+                        <div class="kpi-value" id="kpi-rate">0%</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Avg Loan Amount</div>
+                        <div class="kpi-value" id="kpi-avg-loan">₹0</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Avg Risk Score</div>
+                        <div class="kpi-value" id="kpi-risk">0.0</div>
+                    </div>
+                </div>
+                
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <canvas id="funnelChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Applications Section -->
+            <section id="applications" class="section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>Applications</h2>
+                    <a href="/admin/export/applications" class="primary-btn" style="width: auto;">Export CSV</a>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <input type="text" id="app-search" placeholder="Search..." style="padding: 8px; border-radius: 6px; border: 1px solid var(--border);">
+                    <select id="status-filter" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border);">
+                        <option value="">All Status</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+
+                <table id="app-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="app-table-body">
+                        <!-- Rows injected via JS -->
+                    </tbody>
+                </table>
+                <div id="pagination" style="margin-top: 20px; text-align: right;">
+                    <button id="prev-page" class="secondary-btn" style="width: auto;">Prev</button>
+                    <span id="page-info">Page 1</span>
+                    <button id="next-page" class="secondary-btn" style="width: auto;">Next</button>
+                </div>
+            </section>
+
+            <!-- Tuning Section -->
+            <section id="tuning" class="section">
+                <h2>Policy Tuning</h2>
+                <div class="kpi-card">
+                    <div class="form-group">
+                        <label>Update Bank Context / Policies</label>
+                        <textarea id="tuning-content" rows="10" style="width: 100%; padding: 10px; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;"></textarea>
+                    </div>
+                    <button id="save-tuning" class="primary-btn" style="width: auto; margin-top: 10px;">Save Changes</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Detail Modal -->
+    <div class="modal" id="detail-modal">
+        <div class="slide-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Application Details</h2>
+                <button id="close-modal" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>
+            </div>
+            <div id="modal-content">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        // Auth Check (Simplified)
+        // Ideally checking JWT in localStorage or cookie
+        
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const target = item.dataset.target;
+                if (!target) return;
+                
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                item.classList.add('active');
+                
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                document.getElementById(target).classList.add('active');
+                
+                if (target === 'dashboard') loadDashboard();
+                if (target === 'applications') loadApplications();
+            });
+        });
+
+        // Dashboard Logic
+        async function loadDashboard() {
+            try {
+                // Requires Auth header, assumed managed by browser cookie or we need to add token
+                // For simplicity, assuming session cookie or we prompt login
+                const resp = await fetch('/admin/analytics/summary'); 
+                if (resp.status === 401 || resp.status === 403) {
+                     alert("Unauthorized. Please login as admin.");
+                     return;
+                }
+                const data = await resp.json();
+                
+                document.getElementById('kpi-total').textContent = data.total_applications;
+                document.getElementById('kpi-rate').textContent = `${data.approval_rate_pct}%`;
+                document.getElementById('kpi-avg-loan').textContent = `₹${data.avg_loan_amount}`;
+                document.getElementById('kpi-risk').textContent = data.avg_risk_score;
+
+                // Charts
+                renderStatusChart(data.applications_by_status);
+                renderDailyChart(data.daily_counts);
+                
+                // Funnel
+                const funnelResp = await fetch('/admin/analytics/funnel');
+                const funnelData = await funnelResp.json();
+                renderFunnelChart(funnelData);
+
+            } catch (e) { console.error(e); }
+        }
+
+        let statusChartInst = null;
+        function renderStatusChart(data) {
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            if (statusChartInst) statusChartInst.destroy();
+            statusChartInst = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{
+                        data: Object.values(data),
+                        backgroundColor: ['#4f46e5', '#10b981', '#ef4444', '#f59e0b']
+                    }]
+                },
+                options: { responsive: true, plugins: { title: { display: true, text: 'Applications by Status' } } }
+            });
+        }
+
+        let dailyChartInst = null;
+        function renderDailyChart(data) {
+             const ctx = document.getElementById('dailyChart').getContext('2d');
+             if (dailyChartInst) dailyChartInst.destroy();
+             dailyChartInst = new Chart(ctx, {
+                 type: 'bar',
+                 data: {
+                     labels: data.map(d => d.date),
+                     datasets: [{
+                         label: 'Applications',
+                         data: data.map(d => d.count),
+                         backgroundColor: '#4f46e5'
+                     }]
+                 },
+                 options: { responsive: true, plugins: { title: { display: true, text: 'Daily Trend' } } }
+             });
+        }
+
+        let funnelChartInst = null;
+        function renderFunnelChart(data) {
+             const ctx = document.getElementById('funnelChart').getContext('2d');
+             if (funnelChartInst) funnelChartInst.destroy();
+             
+             const labels = ['Initiated', 'KYC Completed', 'Fraud Check', 'Underwritten', 'Offer Presented', 'Approved'];
+             const values = [data.initiated, data.kyc_completed, data.fraud_checked, data.underwritten, data.offer_presented, data.approved];
+             
+             funnelChartInst = new Chart(ctx, {
+                 type: 'bar',
+                 data: {
+                     labels: labels,
+                     datasets: [{
+                         label: 'Conversion Funnel',
+                         data: values,
+                         backgroundColor: '#8b5cf6',
+                         indexAxis: 'y'
+                     }]
+                 },
+                 options: { responsive: true, plugins: { title: { display: true, text: 'Funnel' } } }
+             });
+        }
+
+        // Applications Logic
+        let currentPage = 1;
+        async function loadApplications(page = 1) {
+            currentPage = page;
+            const tbody = document.getElementById('app-table-body');
+            tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+            
+            try {
+                const resp = await fetch(`/admin/applications?page=${page}`);
+                const data = await resp.json();
+                
+                tbody.innerHTML = '';
+                data.applications.forEach(app => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${app.application_id.substr(0,8)}</td>
+                        <td>${app.customer_name}</td>
+                        <td>₹${app.amount}</td>
+                        <td>${app.applied_date}</td>
+                        <td><span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></td>
+                    `;
+                    tr.onclick = () => openDetail(app.application_id);
+                    tbody.appendChild(tr);
+                });
+                
+                document.getElementById('page-info').textContent = `Page ${data.current_page} of ${data.pages}`;
+                document.getElementById('prev-page').disabled = data.current_page === 1;
+                document.getElementById('next-page').disabled = data.current_page === data.pages;
+
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="5">Error loading data</td></tr>';
+            }
+        }
+        
+        document.getElementById('prev-page').addEventListener('click', () => loadApplications(currentPage - 1));
+        document.getElementById('next-page').addEventListener('click', () => loadApplications(currentPage + 1));
+
+        // Details Modal
+        async function openDetail(id) {
+            const modal = document.getElementById('detail-modal');
+            modal.classList.add('open');
+            document.getElementById('modal-content').innerHTML = 'Loading...';
+            
+            const resp = await fetch(`/admin/applications/${id}`);
+            const data = await resp.json();
+            
+            let html = `
+                <div class="detail-row"><span class="detail-label">Name</span> <strong>${data.customer.name}</strong></div>
+                <div class="detail-row"><span class="detail-label">Phone</span> <strong>${data.customer.phone}</strong></div>
+                <div class="detail-row"><span class="detail-label">Email</span> <strong>${data.customer.email || 'N/A'}</strong></div>
+                
+                <h3>KYC</h3>
+                <div class="detail-row"><span class="detail-label">PAN</span> <strong>${data.kyc.pan}</strong></div>
+                <div class="detail-row"><span class="detail-label">Verified</span> <strong>${data.kyc.verified ? 'Yes' : 'No'}</strong></div>
+                
+                <h3>Fraud & Underwriting</h3>
+                <div class="detail-row"><span class="detail-label">Fraud Score</span> <strong>${data.fraud_check.score || 'N/A'}</strong></div>
+                <div class="detail-row"><span class="detail-label">Risk Score</span> <strong>${data.underwriting.risk_score || 'N/A'}</strong></div>
+                
+                <h3>Chat History</h3>
+                <div class="chat-log">
+            `;
+            
+            data.chat_summary.forEach(msg => {
+                html += `<div class="chat-entry ${msg.role === 'user' ? 'user' : 'bot'}">
+                    <strong>${msg.role === 'user' ? 'Customer' : 'Bot'}:</strong> ${msg.text}
+                </div>`;
+            });
+            
+            html += '</div>';
+            document.getElementById('modal-content').innerHTML = html;
+        }
+        
+        document.getElementById('close-modal').addEventListener('click', () => {
+             document.getElementById('detail-modal').classList.remove('open');
+        });
+
+        // Tuning
+        document.getElementById('save-tuning').addEventListener('click', async () => {
+            const content = document.getElementById('tuning-content').value;
+            await fetch('/admin/tune', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ content })
+            });
+            alert('Policy updated!');
+        });
+
+        // Init
+        loadDashboard();
+    </script>
+</body>
+</html>

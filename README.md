@@ -1,59 +1,55 @@
-# ET_CREDGEN — AI-Powered Loan Assistant
+# ET_CREDGEN - AI Loan Assistant
 
-ET_CREDGEN is a complete, AI-driven loan processing system with a conversational frontend, multi-agent backend, and a secure PostgreSQL data layer.
+ET_CREDGEN is an advanced AI-powered loan origination assistant. It guides users through the loan application process, including KYC verification, fraud checks, underwriting, and sanction letter generation.
 
-## 🚀 Quick Start (Automated Setup)
+## Features
 
-Running the application now automatically initializes your database tables and seeds the default admin account.
+- **Conversational Interface:** Natural language interaction powered by Gemini or OpenRouter.
+- **Streaming Responses:** Real-time token streaming with typing indicators (SSE).
+- **Session Persistence:** Resume applications across devices/sessions using phone number.
+- **Async Workflow:** Non-blocking fraud checks and underwriting using background threads.
+- **Document Upload:** Inline document upload with validation.
+- **Tools:** Integrated EMI Calculator and smart input validation.
+- **Admin Dashboard:** Comprehensive analytics, application management, and policy tuning.
+- **Security:** JWT Authentication, Rate Limiting, Security Headers.
 
-1.  **Clone & Install Dependencies**:
+## Architecture
+
+The backend is refactored into Flask Blueprints:
+- `routes/chat_routes.py`: Chat logic, streaming, session management.
+- `routes/workflow_routes.py`: Async agents (Fraud, Underwriting, Sales, Docs).
+- `routes/admin_routes.py`: Admin analytics and management.
+- `routes/document_routes.py`: File handling.
+- `routes/status_routes.py`: Application status tracking.
+- `routes/tools_routes.py`: Helper tools (EMI, Validation).
+
+## Setup
+
+1.  **Environment Variables:**
+    Copy `.env.example` to `.env` and fill in the required keys.
+    ```bash
+    cp .env.example .env
+    ```
+
+2.  **Install Dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
 
-2.  **Environment Configuration**:
-    Copy `.env.example` to `.env` and fill in your credentials.
-    ```bash
-    cp .env.example .env
-    ```
-    *Note: Ensure `DATABASE_URL` points to an existing PostgreSQL database (e.g., `postgresql://user:pass@localhost:5432/credgen`).*
-
-3.  **Run the App**:
+3.  **Run the Application:**
     ```bash
     python app.py
     ```
-    On startup, the system will:
-    - Create all necessary PostgreSQL tables.
-    - Create the default admin account using your `SEED_ADMIN_*` environment variables.
 
-## 🔐 Security Features
+4.  **Access the App:**
+    -   Customer Chat: `http://localhost:5000/frontend/index.html`
+    -   Status Tracker: `http://localhost:5000/frontend/status.html`
+    -   Admin Panel: `http://localhost:5000/frontend/admin.html`
 
-- **JWT Authentication**: Secure admin access with access/refresh token rotation.
-- **Security Hardening**: Flask-Talisman enforced CSP, HSTS, and XSS protection.
-- **Password Safety**: High-entropy PBKDF2 hashing for all admin credentials.
-- **Rate Limiting**: Protection against brute-force attacks on login endpoints.
+## Configuration
 
-## 🛠️ Components
+See `.env.example` for all configuration options, including API keys and feature toggles.
 
-- **Frontend**: Conversational UI (HTML/JS) and Admin Dashboard.
-- **Agents**: Master, Fraud, Underwriting, Sales, and Documentation agents.
-- **Data Layer**: PostgreSQL with SQLAlchemy ORM and Marshmallow validation.
-- **LLM Services**: Integrated with Gemini and OpenRouter.
+## License
 
-## 📊 Administration
-
-- **Login**: `/auth/login` (POST) to get your JWT.
-- **Dashboard**: Access protected administrative routes using your JWT.
-- **Tuning**: Dynamically update system prompts and policies via the Tuning API.
-
-## 📂 Project Structure
-
-- `app.py`: Main Flask application with automated setup.
-- `models.py`: Database schema and ORM definitions.
-- `auth.py`: JWT authentication blueprint.
-- `validators.py`: Data integrity and validation schemas.
-- `agents/`: Intelligent agent logic (Master, Fraud, etc.).
-- `database.py`: Database connection and pooling configuration.
-
----
-*For manual migrations or legacy data imports, refer to [MIGRATIONS.md](MIGRATIONS.md).*
+MIT
