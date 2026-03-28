@@ -14,7 +14,9 @@ except ImportError:
     OCR_AVAILABLE = False
     print("⚠️  OCR not available. Install pdf2image + pytesseract for image PDFs.")
 
-client = Groq(api_key="API")
+from dotenv import load_dotenv
+load_dotenv()
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # List your PDF files here — names don't matter
 pdf_files = ["adhaar-ocr.pdf", "itr-ocr.pdf", "bank-ocr.pdf", "pan-ocr.pdf"]
