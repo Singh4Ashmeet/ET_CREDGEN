@@ -1,8 +1,10 @@
+import os
 import pdfplumber
 import json
 import re
 from datetime import datetime
 from groq import Groq
+from dotenv import load_dotenv
 
 # ── OCR imports ───────────────────────────────────────────────────────────────
 try:
@@ -14,13 +16,8 @@ except ImportError:
     OCR_AVAILABLE = False
     print("⚠️  OCR not available. Install pdf2image + pytesseract for image PDFs.")
 
-from dotenv import load_dotenv
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-# List your PDF files here — names don't matter
-pdf_files = ["adhaar-ocr.pdf", "itr-ocr.pdf", "bank-ocr.pdf", "pan-ocr.pdf"]
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # STEP 1: TEXT EXTRACTION (text layer first, OCR fallback)
@@ -464,63 +461,3 @@ def extract_profile(pdf_paths):
     }
     missing = validate_profile(profile)
     return final_output, missing
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# FINAL OUTPUT
-# ──────────────────────────────────────────────────────────────────────────────
-
-final_output = {
-    "personal_info": {
-        "name":           profile.get("name"),
-        "date_of_birth":  profile.get("date_of_birth"),
-        "age":            profile.get("age"),
-        "gender":         profile.get("gender"),
-        "aadhaar_number": profile.get("aadhaar_number"),
-        "pan_number":     profile.get("pan_number"),
-    },
-    "contact_info": {
-        "full_address":   profile.get("full_address"),
-        "city":           profile.get("city"),
-        "state":          profile.get("state"),
-        "pincode":        profile.get("pincode"),
-    },
-    "employment_info": {
-        "employment_type":    profile.get("employment_type"),
-        # salaried
-        "employer_name":      profile.get("employer_name"),
-        "assessment_year":    profile.get("assessment_year"),
-        "monthly_income":     profile.get("monthly_income"),
-        "annual_income":      profile.get("annual_income"),
-        "net_taxable_income": profile.get("net_taxable_income"),
-        "tds_deducted":       profile.get("tds_deducted"),
-        # self-employed
-        "business_name":      profile.get("business_name"),
-        "gross_receipts":     profile.get("gross_receipts"),
-        "annual_net_profit":  profile.get("annual_net_profit"),
-        "total_income":       profile.get("total_income"),
-        "tax_paid":           profile.get("tax_paid"),
-    },
-    "bank_info": {
-        "bank_name":           profile.get("bank_name"),
-        "account_holder_name": profile.get("account_holder_name"),
-        "account_number":      profile.get("account_number"),
-        "average_balance":     profile.get("average_balance"),
-    }
-}
-
-print("\n" + "="*50)
-print("FINAL PROFILE")
-print("="*50)
-print(json.dumps(final_output, indent=2, ensure_ascii=False))
-
-# Validation
-missing = validate_profile(profile)
-print("\n" + "="*50)
-if missing:
-    print("⚠️  MISSING FIELDS — please ask customer to re-upload:")
-    for m in missing:
-        print(m)
-else:
-    print("✅ Profile is complete — all required fields populated.")
-print("="*50)
