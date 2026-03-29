@@ -138,7 +138,7 @@ def download_document(document_id):
 @document_bp.route('/extract-profile', methods=['POST'])
 def extract_profile_from_docs():
     try:
-        from utils.doc_extractor import extract_profile
+        from utils.extractor import extract_profile
 
         session_id = request.headers.get('X-Session-ID')
         if not session_id:
