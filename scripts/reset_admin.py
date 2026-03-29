@@ -1,6 +1,10 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app import create_app
-from database import db
-from db_models import AdminUser
+from utils.database import db
+from models.db_models import AdminUser
 import os
 from dotenv import load_dotenv
 

@@ -1,12 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login — CredGen</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="admin.css">
+    <script>
+        const savedTheme = localStorage.getItem('credgen_theme');
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
 </head>
+
 <body class="login-page">
     <div class="login-container">
         <!-- LEFT BRAND PANEL -->
@@ -14,11 +22,35 @@
             <div class="brand-content">
                 <div class="brand-logo">CG</div>
                 <h1>CredGen</h1>
-                <p>Admin Control Panel</p>
+                <p>Enterprise AI Loan Underwriting & Administration Platform</p>
                 <div class="brand-features">
-                    <div class="brand-feature">📊 Real-time Analytics</div>
-                    <div class="brand-feature">📋 Application Management</div>
-                    <div class="brand-feature">🤖 AI Tuning Controls</div>
+                    <div class="brand-feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3>Secure Access</h3>
+                            <p>Multi-factor authentication and role-based access control.</p>
+                        </div>
+                    </div>
+                    <div class="brand-feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3>Advanced Analytics</h3>
+                            <p>Deep insights into loan conversion and risk assessment.</p>
+                        </div>
+                    </div>
+                    <div class="brand-feature">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.54-2.43 2.5 2.5 0 0 1-2.5-2.5V4.5A2.5 2.5 0 0 1 4.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.54-2.43 2.5 2.5 0 0 0 2.5-2.5V4.5A2.5 2.5 0 0 0 19.5 2z"/></svg>
+                        </div>
+                        <div class="feature-text">
+                            <h3>AI Tuning</h3>
+                            <p>Refine underwriting rules and system behavior in real-time.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -36,7 +68,8 @@
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" placeholder="Enter password" required autocomplete="current-password">
+                    <input type="password" id="password" placeholder="Enter password" required
+                        autocomplete="current-password">
                 </div>
 
                 <div class="checkbox-group">
@@ -48,7 +81,8 @@
 
                 <button type="submit" class="btn-login" id="btn-login">Sign In</button>
 
-                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); text-align: center;">
+                <div
+                    style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); text-align: center;">
                     <p style="font-size: 0.8rem; color: var(--text-muted);">
                         Default: <strong>admin</strong> / <strong>admin@123</strong>
                     </p>
@@ -61,18 +95,18 @@
 
     <script>
         // Toggle Password Visibility
-        document.getElementById('show-password').addEventListener('change', function() {
+        document.getElementById('show-password').addEventListener('change', function () {
             const passwordInput = document.getElementById('password');
             passwordInput.type = this.checked ? 'text' : 'password';
         });
 
         // Check if already logged in
-        (function() {
+        (function () {
             const token = sessionStorage.getItem('admin_token');
             if (token) {
                 fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
                     .then(r => { if (r.ok) window.location.href = '/admin/dashboard'; })
-                    .catch(() => {});
+                    .catch(() => { });
             }
         })();
 
@@ -123,4 +157,5 @@
         }
     </script>
 </body>
+
 </html>

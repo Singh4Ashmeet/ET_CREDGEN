@@ -20,15 +20,15 @@
     });
 })();
 
-function getToken() {
-    return sessionStorage.getItem('admin_token');
-}
+// Global auth headers helper
+window.getAuthHeaders = function() {
+    const token = sessionStorage.getItem('admin_token');
+    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+};
 
+// Local alias for auth-guard scripts
 function authHeaders() {
-    return {
-        'Authorization': 'Bearer ' + getToken(),
-        'Content-Type': 'application/json',
-    };
+    return window.getAuthHeaders();
 }
 
 function logout() {

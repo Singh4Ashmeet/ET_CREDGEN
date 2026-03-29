@@ -8,91 +8,99 @@ def clean_text(text):
     return text
 
 def extract_amount(text):
-    """Extract loan amount from text
-    Examples: '5 lakhs', '₹500000', '5L', 'five lakh'
-    """
+    """Extract loan amount with context awareness."""
     text = text.lower()
     
-    # Pattern 1: Direct numbers with ₹ or Rs
-    pattern1 = r'[₹rs.\s]*(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:lakh|lac|l)?'
+    # Context-aware pattern: looks for loan/need/amount near a number
+    # Also handles lakhs/lac/L suffix specifically for the number
+    patterns = [
+        r'(?:loan|amount|need|of|for|₹|rs\.?)\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lac|l|cr|crore)?\b',
+        r'\b(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lac|l|cr|crore)\b'
+    ]
     
-    # Pattern 2: Word form
-    word_to_num = {
-        'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-        'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
-    }
-    
-    # Try numeric pattern
-    matches = re.findall(pattern1, text)
-    for match in matches:
-        amount = float(match.replace(',', ''))
-        # Check if lakhs mentioned
-        if 'lakh' in text or 'lac' in text or 'l' in text:
-            amount *= 100000
-        return int(amount)
-    
-    # Try word form
-    for word, num in word_to_num.items():
-        if word in text and ('lakh' in text or 'lac' in text):
-            return num * 100000
-    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text)
+        for match in matches:
+            val_str = match.group(1).replace(',', '')
+            try:
+                amount = float(val_str)
+                suffix = match.group(2)
+                if suffix in ['lakh', 'lac', 'l']:
+                    amount *= 100000
+                elif suffix in ['cr', 'crore']:
+                    amount *= 10000000
+                
+                if amount >= 10000: # Threshold to avoid picking up age/tenure
+                    return int(amount)
+            except:
+                continue
     return None
 
 def extract_tenure(text):
-    """Extract loan tenure in months
-    Examples: '3 years', '36 months', '5Y'
-    """
+    """Extract tenure with context awareness."""
     text = text.lower()
     
-    # Pattern for years
-    year_pattern = r'(\d+)\s*(?:year|yr|y)'
-    year_match = re.search(year_pattern, text)
-    if year_match:
-        return int(year_match.group(1)) * 12
+    # Specific patterns for months and years that aren't age
+    patterns = [
+        r'(\d+)\s*(?:month|mon|m)\b',
+        r'(?:for|tenure|period|of)\s*(\d+)\s*(?:year|yr|y)\b'
+    ]
     
-    # Pattern for months
-    month_pattern = r'(\d+)\s*(?:month|mon|m)'
-    month_match = re.search(month_pattern, text)
-    if month_match:
-        return int(month_match.group(1))
-    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            val = int(match.group(1))
+            if 'year' in pattern or 'yr' in pattern or 'y' in match.group(0):
+                if val < 50: # Likely years
+                    return val * 12
+            return val
     return None
 
 def extract_age(text):
-    """Extract age from text"""
-    pattern = r'\b(\d{2})\b(?:\s*(?:year|yr|y|age))?'
-    matches = re.findall(pattern, text)
-    for match in matches:
-        age = int(match)
-        if 18 <= age <= 80:  # Reasonable age range
-            return age
+    """Extract age with context awareness."""
+    text = text.lower()
+    patterns = [
+        r'(\d{2})\s*(?:year|yr|y)?\s*(?:old|age)\b',
+        r'(?:age|is|am)\s*(\d{2})\b'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            val = int(match.group(1))
+            if 18 <= val <= 85:
+                return val
     return None
 
 def extract_income(text):
-    """Extract income from text
-    Examples: '8 LPA', '80k per month', '₹960000 yearly'
-    """
+    """Extract income with context awareness."""
     text = text.lower()
     
-    # Pattern for LPA (Lakhs Per Annum)
-    lpa_pattern = r'(\d+(?:\.\d+)?)\s*(?:lpa|lakh per annum)'
-    lpa_match = re.search(lpa_pattern, text)
-    if lpa_match:
-        return int(float(lpa_match.group(1)) * 100000)
+    # Patterns for LPA, monthly, annual
+    patterns = [
+        r'(\d+(?:\.\d+)?)\s*(?:lpa|lakh per annum|lakh a year)',
+        r'(\d+(?:,\d+)*)\s*(?:per month|pm|monthly)',
+        r'(?:income|earn|salary|earning)(?:\s+is)?\s*(?:rs\.?|₹)?\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(lakh|lac|l)?(?:\s*(?:per year|yearly|per annum|annually|a year))?'
+    ]
     
-    # Pattern for monthly with k
-    monthly_k_pattern = r'(\d+)k?\s*(?:per month|pm|monthly|/month)'
-    monthly_match = re.search(monthly_k_pattern, text)
-    if monthly_match:
-        monthly = int(monthly_match.group(1)) * 1000
-        return monthly * 12
-    
-    # Direct annual amount
-    annual_pattern = r'[₹rs.\s]*(\d+(?:,\d+)*)\s*(?:yearly|annual|per annum|pa)'
-    annual_match = re.search(annual_pattern, text)
-    if annual_match:
-        return int(annual_match.group(1).replace(',', ''))
-    
+    for i, pattern in enumerate(patterns):
+        match = re.search(pattern, text)
+        if match:
+            try:
+                val = float(match.group(1).replace(',', ''))
+                if i == 0: # LPA
+                    return int(val * 100000)
+                if i == 1: # Monthly
+                    if val < 1000: # handled as 'k'
+                         val *= 1000
+                    return int(val * 12)
+                if i == 2: # Annual
+                    suffix = match.group(2) if len(match.groups()) > 1 else None
+                    if suffix in ['lakh', 'lac', 'l']:
+                        val *= 100000
+                    return int(val)
+            except:
+                continue
     return None
 
 def extract_name(text):

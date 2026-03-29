@@ -5,35 +5,35 @@
 // ─── STATE ───────────────────────────────────────────────────────
 let sessionId = null;
 let currentStage = 'collecting_details';
-let isDark = false;
+let isDark = true; // Default dark-first theme
 let calculatorOpen = false;
 let isProcessing = false;
 
 // ─── DOM REFS ────────────────────────────────────────────────────
-const $  = id => document.getElementById(id);
-const landingPage        = $('landing-page');
-const chatApp            = $('chat-app');
-const messagesContainer  = $('messages-container');
-const typingIndicator    = $('typing-indicator');
-const chipsContainer     = $('chips-container');
-const userInput          = $('user-input');
-const charCounter        = $('char-counter');
-const panelBody          = $('panel-body');
-const panelTitle         = $('panel-title');
-const inputHint          = $('input-hint');
-const calcPanel          = $('calculator-panel');
+const $ = id => document.getElementById(id);
+const landingPage = $('landing-page');
+const chatApp = $('chat-app');
+const messagesContainer = $('messages-container');
+const typingIndicator = $('typing-indicator');
+const chipsContainer = $('chips-container');
+const userInput = $('user-input');
+const charCounter = $('char-counter');
+const panelBody = $('panel-body');
+const panelTitle = $('panel-title');
+const inputHint = $('input-hint');
+const calcPanel = $('calculator-panel');
 
 // ─── STAGE → STEP MAPPING ───────────────────────────────────────
 const STAGE_STEP_MAP = {
-    greeting:             0,
-    collecting_details:   0,
-    kyc_collection:       1,
-    fraud_check:          2,
-    underwriting:         3,
-    offer_presentation:   4,
+    greeting: 0,
+    collecting_details: 0,
+    kyc_collection: 1,
+    fraud_check: 2,
+    underwriting: 3,
+    offer_presentation: 4,
     rejection_counseling: 4,
-    documentation:        5,
-    closed:               5,
+    documentation: 5,
+    closed: 5,
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -41,6 +41,8 @@ const STAGE_STEP_MAP = {
 // ═══════════════════════════════════════════════════════════════
 
 function startApplication() {
+    sessionStorage.setItem('landingScrollY', window.scrollY);
+
     const landing = document.getElementById('landing-page');
     const chatApp = document.getElementById('chat-app');
     if (landing) {
@@ -51,29 +53,31 @@ function startApplication() {
         }, 400);
     }
     if (chatApp) {
-        chatApp.classList.remove('hidden');
-        chatApp.style.display = 'flex';
-        chatApp.style.opacity = '0';
-        chatApp.style.transition = 'opacity 0.4s ease';
         setTimeout(() => {
-            chatApp.style.opacity = '1';
-        }, 50);
+            chatApp.classList.remove('hidden');
+            chatApp.style.display = 'flex';
+            chatApp.style.opacity = '0';
+            chatApp.style.transition = 'opacity 0.4s ease';
+            setTimeout(() => {
+                chatApp.style.opacity = '1';
+            }, 50);
+        }, 400);
     }
     initChat();
 }
 
 function initChat() {
     if (!sessionId) {
-        sessionId = 'session_' + Date.now() + '_' 
-                    + Math.random().toString(36).slice(2, 10);
+        sessionId = 'session_' + Date.now() + '_'
+            + Math.random().toString(36).slice(2, 10);
         localStorage.setItem('credgen_session_id', sessionId);
     }
     // Show welcome message locally — NO fetch call
     addMessage(
-        "👋 Welcome to CredGen AI!\n\n"
+        "Welcome to CredGen AI!\n\n"
         + "I'm your AI loan assistant. I'll help you get a loan "
         + "in just a few minutes — no branch visits, no paperwork.\n\n"
-        + "What kind of loan are you looking for?", 
+        + "What kind of loan are you looking for?",
         'bot'
     );
     showChips([
@@ -86,9 +90,28 @@ function initChat() {
     updateProgressTracker('collecting_details', 0);
 }
 
+function toggleContextPanel() {
+    const panel = $('context-panel');
+    if (panel) {
+        panel.classList.toggle('show');
+    }
+}
+
 function backToLanding() {
     chatApp.classList.add('hidden');
+    chatApp.style.display = 'none';
+    chatApp.style.opacity = '0';
+
     landingPage.classList.remove('hidden');
+    landingPage.style.display = 'block';
+
+    setTimeout(() => {
+        landingPage.style.opacity = '1';
+        window.scrollTo({
+            top: parseInt(sessionStorage.getItem('landingScrollY') || '0'),
+            behavior: 'auto'
+        });
+    }, 50);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -97,9 +120,21 @@ function backToLanding() {
 
 function toggleTheme() {
     isDark = !isDark;
-    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : '');
-    const btn = $('btn-theme');
-    if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+    const theme = isDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', isDark ? '' : 'light');
+    localStorage.setItem('credgen_theme', theme);
+
+    // Update both toggle buttons (if they exist)
+    const buttons = [$('theme-toggle'), $('btn-theme')];
+    buttons.forEach(btn => {
+        if (!btn) return;
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = isDark ? 'bi bi-moon-stars' : 'bi bi-sun-fill';
+        }
+    });
+
+    console.log(`[CredGen] Theme toggled to: ${theme}`);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -117,7 +152,11 @@ function addMessage(text, role, extras) {
 
     const avatar = document.createElement('div');
     avatar.className = 'msg-avatar';
-    avatar.textContent = role === 'bot' ? 'CG' : 'You';
+    if (role === 'bot') {
+        avatar.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>';
+    } else {
+        avatar.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+    }
 
     const content = document.createElement('div');
     content.className = 'msg-content';
@@ -159,26 +198,26 @@ function showChips(suggestions) {
         return;
     }
     chipsContainer.innerHTML = '';
-    
+
     const chipValueMap = {
-        '₹1 lakh':        '1 lakh',
-        '₹3 lakh':        '3 lakh',
-        '₹5 lakh':        '5 lakh',
-        '₹10 lakh':       '10 lakh',
-        '₹25,000/month':  '25000',
-        '₹50,000/month':  '50000',
-        '₹1 lakh/month':  '100000',
-        'Personal use':   'personal',
-        'Home purchase':  'home',
-        'Salaried':       'salaried',
-        'Self-employed':  'self employed',
+        '₹1 lakh': '1 lakh',
+        '₹3 lakh': '3 lakh',
+        '₹5 lakh': '5 lakh',
+        '₹10 lakh': '10 lakh',
+        '₹25,000/month': '25000',
+        '₹50,000/month': '50000',
+        '₹1 lakh/month': '100000',
+        'Personal use': 'personal',
+        'Home purchase': 'home',
+        'Salaried': 'salaried',
+        'Self-employed': 'self employed',
         'Business owner': 'business owner',
-        'Retired':        'retired',
-        '1 year':         '12 months',
-        '2 years':        '24 months',
-        '3 years':        '36 months',
-        '5 years':        '60 months',
-        'Skip email':     'skip',
+        'Retired': 'retired',
+        '1 year': '12 months',
+        '2 years': '24 months',
+        '3 years': '36 months',
+        '5 years': '60 months',
+        'Skip email': 'skip',
     };
 
     suggestions.forEach(text => {
@@ -187,7 +226,7 @@ function showChips(suggestions) {
         chip.textContent = text;
         chip.onclick = () => {
             if (isProcessing) return;
-            
+
             chipsContainer.querySelectorAll('.chip').forEach(c => {
                 c.disabled = true;
                 c.classList.add('used');
@@ -196,11 +235,11 @@ function showChips(suggestions) {
             chip.textContent = '✓ ' + text;
 
             const sendValue = chipValueMap[text] || text;
-            
+
             addMessage(text, 'user');
             userInput.value = '';
             if (typeof updateCharCounter === 'function') updateCharCounter();
-            
+
             setTimeout(() => {
                 chipsContainer.classList.add('hidden');
             }, 400);
@@ -218,25 +257,25 @@ function showChips(suggestions) {
 
 function updateProgressTracker(stage, progress) {
     const stageToStep = {
-        'collecting_details':       0,
-        'COLLECTING_DETAILS':       0,
-        'greeting':                 0,
-        'kyc_collection':           1,
-        'kyc_pending':              1,
-        'KYC_COLLECTION':           1,
-        'fraud_check':              2,
-        'FRAUD_CHECK':              2,
-        'underwriting':             3,
-        'UNDERWRITING':             3,
-        'offer_presentation':       4,
-        'OFFER_PRESENTATION':       4,
-        'offer_presented':          4,
-        'rejection_counseling':     4,
-        'REJECTION_COUNSELING':     4,
-        'documentation':            5,
-        'DOCUMENTATION':            5,
-        'closed':                   5,
-        'CLOSED':                   5,
+        'collecting_details': 0,
+        'COLLECTING_DETAILS': 0,
+        'greeting': 0,
+        'kyc_collection': 1,
+        'kyc_pending': 1,
+        'KYC_COLLECTION': 1,
+        'fraud_check': 2,
+        'FRAUD_CHECK': 2,
+        'underwriting': 3,
+        'UNDERWRITING': 3,
+        'offer_presentation': 4,
+        'OFFER_PRESENTATION': 4,
+        'offer_presented': 4,
+        'rejection_counseling': 4,
+        'REJECTION_COUNSELING': 4,
+        'documentation': 5,
+        'DOCUMENTATION': 5,
+        'closed': 5,
+        'CLOSED': 5,
     };
 
     const activeStep = stageToStep[stage] || 0;
@@ -250,7 +289,7 @@ function updateProgressTracker(stage, progress) {
         if (index < activeStep) {
             el.classList.add('complete', 'completed');
             const circle = el.querySelector('.step-circle');
-            if(circle) circle.textContent = '✓';
+            if (circle) circle.textContent = '✓';
         } else if (index === activeStep) {
             el.classList.add('active');
         }
@@ -283,8 +322,8 @@ function updateContextPanel(response) {
         allFields.forEach(f => {
             const done = !!entities[f];
             const icon = done ? '✓' : '○';
-            const cls  = done ? 'done' : 'pending';
-            const val  = done ? ` — ${formatValue(f, entities[f])}` : '';
+            const cls = done ? 'done' : 'pending';
+            const val = done ? ` — ${formatValue(f, entities[f])}` : '';
             html += `<li><span class="check-icon ${cls}">${icon}</span>${labels[f] || f}${val}</li>`;
         });
         html += '</ul>';
@@ -298,7 +337,7 @@ function updateContextPanel(response) {
         kycFields.forEach(f => {
             const done = !!entities[f];
             const icon = done ? '✓' : '○';
-            const cls  = done ? 'done' : 'pending';
+            const cls = done ? 'done' : 'pending';
             html += `<li><span class="check-icon ${cls}">${icon}</span>${labels[f] || f}</li>`;
         });
         html += '</ul>';
@@ -319,7 +358,7 @@ function updateContextPanel(response) {
         if (offer.loan_amount) {
             panelBody.innerHTML = `
                 <div class="offer-card">
-                    <h4>💰 Loan Offer</h4>
+                    <h4>Loan Offer</h4>
                     <div class="offer-row"><span class="label">Amount</span><span class="value">₹${fmtINR(offer.loan_amount)}</span></div>
                     <div class="offer-row"><span class="label">Rate</span><span class="value">${offer.interest_rate}% p.a.</span></div>
                     <div class="offer-row"><span class="label">Tenure</span><span class="value">${offer.tenure_months} months</span></div>
@@ -334,7 +373,7 @@ function updateContextPanel(response) {
         const details = response.sanction_details || {};
         panelBody.innerHTML = `
             <div class="sanction-card">
-                <h4>📄 Sanction Letter Ready</h4>
+                <h4>Sanction Letter Ready</h4>
                 <p>${details.applicant_name || 'Applicant'}</p>
                 <p>₹${fmtINR(details.amount || 0)}</p>
                 <a class="btn-download" href="${response.download_url || '#'}" target="_blank">Download PDF</a>
@@ -456,10 +495,10 @@ function showProcessingCard(worker) {
         if (!panel) return;
 
         const labels = {
-            'fraud':         'Running security verification...',
-            'underwriting':  'Assessing your creditworthiness...',
+            'fraud': 'Running security verification...',
+            'underwriting': 'Assessing your creditworthiness...',
             'documentation': 'Generating your sanction letter...',
-            'sales':         'Preparing your loan offer...',
+            'sales': 'Preparing your loan offer...',
         };
         const label = labels[worker] || 'Processing...';
 
@@ -496,10 +535,10 @@ function hideProcessingCard() {
 
 async function triggerWorker(worker, action) {
     if (worker === 'none') return;
-    
+
     isProcessing = true;
     showProcessingCard(worker);
-    
+
     try {
         const endpointMap = {
             'call_fraud_api': '/fraud',
@@ -511,7 +550,7 @@ async function triggerWorker(worker, action) {
             'sales': '/sales',
             'documentation': '/documentation'
         };
-        
+
         let url = endpointMap[action] || endpointMap[worker];
         if (!url) {
             console.warn('[WORKER] No URL for action:', action);
@@ -530,9 +569,9 @@ async function triggerWorker(worker, action) {
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
-                'X-Session-ID': sessionId 
+                'X-Session-ID': sessionId
             },
             body: JSON.stringify({ action: 'generate' }),
             signal: controller.signal
@@ -553,7 +592,7 @@ async function triggerWorker(worker, action) {
         } catch (je) {
             throw new Error("Server returned non-JSON response (likely a crash logs page).");
         }
-        
+
         console.log(`[WORKER] ${url} data:`, data);
 
         hideProcessingCard();
@@ -562,7 +601,7 @@ async function triggerWorker(worker, action) {
         if (data.message) {
             addMessage(data.message, 'bot');
         } else {
-             addMessage(`${worker.charAt(0).toUpperCase() + worker.slice(1)} check completed.`, 'bot');
+            addMessage(`${worker.charAt(0).toUpperCase() + worker.slice(1)} check completed.`, 'bot');
         }
 
         if (data.stage) {
@@ -592,14 +631,14 @@ async function triggerWorker(worker, action) {
         // Explicit chaining — don't rely on generic condition alone
         const nextAction = data.action;
         const nextWorker = data.worker;
-        
+
         console.log(`[WORKER] Next: worker=${nextWorker}, action=${nextAction}`);
-        
+
         const shouldChain = nextAction
-              && nextAction !== 'none'
-              && nextAction !== 'wait_for_offer_decision'
-              && endpointMap[nextAction];
-              
+            && nextAction !== 'none'
+            && nextAction !== 'wait_for_offer_decision'
+            && endpointMap[nextAction];
+
         if (shouldChain) {
             console.log(`[WORKER] Chaining to: ${nextAction} in 1.5s`);
             setTimeout(() => triggerWorker(nextWorker, nextAction), 1500);
@@ -672,28 +711,28 @@ function checkInputIntelligence(text) {
     // Phone detection
     const phoneMatch = text.match(/\b[6-9]\d{9}\b/);
     if (phoneMatch) {
-        showHint('📱 Phone number detected', 'valid');
+        showHint('Phone number detected', 'valid');
         return;
     }
 
     // PAN detection
     const panMatch = text.toUpperCase().match(/\b[A-Z]{5}\d{4}[A-Z]\b/);
     if (panMatch) {
-        showHint('🪪 PAN number detected', 'valid');
+        showHint('PAN number detected', 'valid');
         return;
     }
 
     // Aadhaar detection
     const aadhaarMatch = text.match(/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/);
     if (aadhaarMatch) {
-        showHint('🔐 Aadhaar number detected', 'valid');
+        showHint('Aadhaar number detected', 'valid');
         return;
     }
 
     // Pincode detection
     const pincodeMatch = text.match(/\b\d{6}\b/);
     if (pincodeMatch && !aadhaarMatch) {
-        showHint('📍 Pincode detected', 'valid');
+        showHint('Pincode detected', 'valid');
         return;
     }
 
@@ -701,7 +740,7 @@ function checkInputIntelligence(text) {
     const amountMatch = text.match(/(?:₹|rs\.?\s*)?(\d[\d,]*)\s*(?:lakh|lac|l)/i);
     if (amountMatch) {
         const val = parseFloat(amountMatch[1].replace(/,/g, '')) * 100000;
-        showHint(`💰 ₹${fmtINR(val)}`, 'valid');
+        showHint(`₹${fmtINR(val)}`, 'valid');
         return;
     }
 
@@ -765,6 +804,48 @@ document.addEventListener('DOMContentLoaded', () => {
     // Calculator is CLOSED by default (BUG 3 FIX)
     // Already hidden via HTML class
 
-    // Calculate initial values
-    calculateEMI();
+    // Load saved inputs to prevent data loss
+    const savedInput = sessionStorage.getItem('credgen_user_input');
+    if (savedInput && userInput) {
+        userInput.value = savedInput;
+        updateCharCounter();
+        autoGrowTextarea();
+    }
+
+    userInput.addEventListener('input', () => {
+        sessionStorage.setItem('credgen_user_input', userInput.value);
+    });
+
+    // Handle Theme on load
+    const savedTheme = localStorage.getItem('credgen_theme');
+    if (savedTheme === 'light') {
+        isDark = false;
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        isDark = true;
+        document.documentElement.removeAttribute('data-theme');
+    }
+    
+    // Sync all theme icons
+    [document.getElementById('theme-toggle'), document.getElementById('btn-theme')].forEach(btn => {
+        if (!btn) return;
+        const icon = btn.querySelector('i');
+        if (icon) icon.className = isDark ? 'bi bi-moon-stars' : 'bi bi-sun-fill';
+    });
+    // File input handling
+    const fileInput = $('file-input');
+    if (fileInput) {
+        fileInput.addEventListener('change', e => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                const names = Array.from(files).map(f => f.name).join(', ');
+                addMessage(`Paperclip: Attached ${files.length} file(s): ${names}`, 'user');
+
+                // Show a bot confirmation
+                setTimeout(() => {
+                    addMessage("I've received your documents. I'll analyze them as we proceed with the application.", 'bot');
+                }, 800);
+            }
+        });
+    }
 });

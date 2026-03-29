@@ -6,8 +6,8 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from database import db, init_db
-from db_models import AdminUser, RevokedToken
+from utils.database import db, init_db
+from models.db_models import AdminUser, RevokedToken
 from dotenv import load_dotenv
 from datetime import timedelta
 
@@ -38,13 +38,6 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = upload_folder
 
     # --- Database ---
-    db_url = os.getenv('DATABASE_URL')
-    if not db_url:
-        db_path = os.path.join(os.path.dirname(__file__), 'credgen.db')
-        db_url = f'sqlite:///{db_path}'
-        os.environ['DATABASE_URL'] = db_url
-        logger.info(f"Using SQLite at {db_path}")
-
     init_db(app)
 
     # --- Extensions ---
@@ -68,7 +61,7 @@ def create_app():
     )
 
     # --- Register Blueprints ---
-    from auth import auth_bp
+    from routes.auth_routes import auth_bp
     from routes.chat_routes import chat_bp
     from routes.admin_routes import admin_bp
     from routes.workflow_routes import workflow_bp
@@ -213,24 +206,24 @@ def _seed_admin_user():
 
 # ─── ENTRY POINT ──────────────────────────────────────────────────────
 
-app = create_app()
-
-print("[STARTUP] Pre-warming ML models...")
-try:
-    from utils.agent_factory import get_fraud_agent, get_underwriting_agent
-    fraud_agent = get_fraud_agent()
-    underwriting_agent = get_underwriting_agent()
-    _dummy = {'loan_amount': 100000, 'tenure': 24, 'age': 30, 'income': 50000,
-              'credit_score': 700, 'num_active_loans': 0, 'employment_type': 'salaried',
-              'pan': 'ABCDE1234F', 'aadhaar': '123456789012', 'name': 'Test User',
-              'address': 'Test Address', 'pincode': '400001', 'purpose': 'personal'}
-    fraud_agent.perform_fraud_check(_dummy)
-    underwriting_agent.perform_underwriting(_dummy)
-    print("[STARTUP] Models pre-warmed successfully.")
-except Exception as e:
-    print(f"[STARTUP] Pre-warm skipped (non-fatal): {e}")
-
 if __name__ == '__main__':
+    app = create_app()
+
+    print("[STARTUP] Pre-warming ML models...")
+    try:
+        from utils.agent_factory import get_fraud_agent, get_underwriting_agent
+        fraud_agent = get_fraud_agent()
+        underwriting_agent = get_underwriting_agent()
+        _dummy = {'loan_amount': 100000, 'tenure': 24, 'age': 30, 'income': 50000,
+                  'credit_score': 700, 'num_active_loans': 0, 'employment_type': 'salaried',
+                  'pan': 'ABCDE1234F', 'aadhaar': '123456789012', 'name': 'Test User',
+                  'address': 'Test Address', 'pincode': '400001', 'purpose': 'personal'}
+        fraud_agent.perform_fraud_check(_dummy)
+        underwriting_agent.perform_underwriting(_dummy)
+        print("[STARTUP] Models pre-warmed successfully.")
+    except Exception as e:
+        print(f"[STARTUP] Pre-warm skipped (non-fatal): {e}")
+
     port = int(os.getenv('PORT', 5000))
     app.run(
         host='0.0.0.0',

@@ -5,8 +5,8 @@ from flask_jwt_extended import (
 )
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from database import db
-from db_models import AdminUser, RevokedToken
+from utils.database import db
+from models.db_models import AdminUser, RevokedToken
 from datetime import datetime
 import os
 

@@ -42,8 +42,8 @@ class FraudAgent:
         score = 0.0
         flags = []
         try:
-            from database import db
-            from db_models import LoanApplication, Customer
+            from utils.database import db
+            from models.db_models import FraudCheck, LoanApplication, Customer
             phone = entities.get('phone')
             if phone:
                 cutoff = datetime.utcnow() - timedelta(hours=24)
