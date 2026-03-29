@@ -10,7 +10,8 @@ from dotenv import load_dotenv
 try:
     from pdf2image import convert_from_path
     import pytesseract
-    pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    tesseract_path = os.getenv("TESSERACT_PATH", "tesseract")
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
     OCR_AVAILABLE = True
 except ImportError:
     OCR_AVAILABLE = False
@@ -44,7 +45,8 @@ def extract_text(pdf_path):
             print(f"  ⚠️  No text layer in {pdf_path} and OCR is not installed.")
             return ""
         print(f"  📷 No text layer — running OCR on {pdf_path}...")
-        images = convert_from_path(pdf_path, dpi=300, poppler_path=r"C:\poppler\Library\bin")
+        poppler_path = os.getenv("POPPLER_PATH", None)
+        images = convert_from_path(pdf_path, dpi=300, poppler_path=poppler_path)
         for img in images:
             img = preprocess_for_ocr(img)
             text += pytesseract.image_to_string(img, config="--psm 6") + "\n"
