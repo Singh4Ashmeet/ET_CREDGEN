@@ -410,40 +410,60 @@ def validate_profile(profile):
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
-profile = {}
+def extract_profile(pdf_paths):
+    profile = {}
+    for pdf in pdf_paths:
+        text = extract_text(pdf)
+        if not text:
+            continue
+        doc_type = classify_document(text)
+        if doc_type == "unknown":
+            continue
+        data = extract_structured(text, doc_type)
+        if doc_type == "aadhaar":    process_aadhaar(data, profile)
+        elif doc_type == "pan":      process_pan(data, profile)
+        elif doc_type == "form16":   process_form16(data, profile)
+        elif doc_type == "itr":      process_itr(data, profile)
+        elif doc_type == "bank":     process_bank(data, profile)
 
-for pdf in pdf_files:
-    print(f"\n{'='*50}")
-    print(f"Processing: {pdf}")
-    print('='*50)
-
-    text = extract_text(pdf)
-    if not text:
-        print(f"  ❌ Could not extract any text from {pdf}, skipping.")
-        continue
-
-    print(f"\nRAW TEXT (preview):\n{text[:300]}...\n")
-
-    # Classify by content — filename irrelevant
-    doc_type = classify_document(text)
-    print(f"📄 Detected Doc Type: {doc_type}")
-
-    if doc_type == "unknown":
-        print(f"  ⚠️  Could not classify {pdf}, skipping.")
-        continue
-
-    data = extract_structured(text, doc_type)
-
-    if doc_type == "aadhaar":
-        process_aadhaar(data, profile)
-    elif doc_type == "pan":
-        process_pan(data, profile)
-    elif doc_type == "form16":
-        process_form16(data, profile)
-    elif doc_type == "itr":
-        process_itr(data, profile)
-    elif doc_type == "bank":
-        process_bank(data, profile)
+    final_output = {
+        "personal_info": {
+            "name":           profile.get("name"),
+            "date_of_birth":  profile.get("date_of_birth"),
+            "age":            profile.get("age"),
+            "gender":         profile.get("gender"),
+            "aadhaar_number": profile.get("aadhaar_number"),
+            "pan_number":     profile.get("pan_number"),
+        },
+        "contact_info": {
+            "full_address":   profile.get("full_address"),
+            "city":           profile.get("city"),
+            "state":          profile.get("state"),
+            "pincode":        profile.get("pincode"),
+        },
+        "employment_info": {
+            "employment_type":    profile.get("employment_type"),
+            "employer_name":      profile.get("employer_name"),
+            "assessment_year":    profile.get("assessment_year"),
+            "monthly_income":     profile.get("monthly_income"),
+            "annual_income":      profile.get("annual_income"),
+            "net_taxable_income": profile.get("net_taxable_income"),
+            "tds_deducted":       profile.get("tds_deducted"),
+            "business_name":      profile.get("business_name"),
+            "gross_receipts":     profile.get("gross_receipts"),
+            "annual_net_profit":  profile.get("annual_net_profit"),
+            "total_income":       profile.get("total_income"),
+            "tax_paid":           profile.get("tax_paid"),
+        },
+        "bank_info": {
+            "bank_name":           profile.get("bank_name"),
+            "account_holder_name": profile.get("account_holder_name"),
+            "account_number":      profile.get("account_number"),
+            "average_balance":     profile.get("average_balance"),
+        }
+    }
+    missing = validate_profile(profile)
+    return final_output, missing
 
 
 # ──────────────────────────────────────────────────────────────────────────────
