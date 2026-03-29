@@ -25,4 +25,10 @@ rapidfuzz
 # Other utilities
 werkzeug
 reportlab
+
 pypdf2
+pdfplumber
+pdf2image
+pytesseract
+groq
+Pillow
