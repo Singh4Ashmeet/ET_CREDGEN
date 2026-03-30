@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response, stream_with_context
-from database import db
-from db_models import ChatSession, Customer, LoanApplication, KYCRecord
+from utils.database import db
+from models.db_models import ChatSession, Customer, LoanApplication, KYCRecord
 from agents.master_agent import IntentType, ConversationStage
 from utils.agent_factory import get_master_agent
 from utils.chat_utils import (
@@ -70,77 +70,14 @@ def chat():
 
         response = None
 
-        # Mode: enabled or hybrid — try LLM first
-        if gemini_mode in ("enabled", "hybrid") and llm_service is not None:
-            try:
-                base_prompt = os.getenv("LLM_SYSTEM_PROMPT",
-                    "You are CredGen AI, an intelligent Indian loan assistant.")
-                bank_context = get_bank_context()
-                system_prompt = (f"{base_prompt}\n\n[BANK CONTEXT]\n{bank_context}"
-                                 if bank_context else base_prompt)
-
-                current_stage = user_master_agent.state["stage"]
-                stage_details = get_workflow_stage_details(current_stage)
-                collected = {k: v for k, v in
-                             user_master_agent.state["entities"].items() if v}
-
-                workflow_prompt = f"""
-CURRENT WORKFLOW STATE:
-- Stage: {stage_details.get('name', getattr(current_stage, 'value', current_stage))}
-- Progress: {user_master_agent.state.get('workflow_progress', 0)}%
-- Collected: {json.dumps(collected, default=str)}
-- Still needed: {list(user_master_agent.state.get('missing_fields', []))}
-- KYC still needed: {list(user_master_agent.state.get('missing_kyc_fields', []))}
-
-Ask for ONE missing piece of information at a time.
-Be conversational and friendly. Use Indian English naturally.
-Never ask for information already collected.
-"""
-                full_prompt = system_prompt + "\n\n" + workflow_prompt
-                llm_resp = llm_service.generate_response(user_input, full_prompt)
-
-                if (llm_resp and llm_resp.get('status') == 'success'
-                        and llm_resp.get('message')):
-                    db_session.failure_count = 0
-                    worker = determine_worker_from_stage(current_stage)
-                    response = {
-                        'message': llm_resp['message'],
-                        'suggestions': llm_resp.get('suggestions', []),
-                        'worker': worker,
-                        'action': {'fraud': 'call_fraud_api',
-                                   'underwriting': 'call_underwriting_api',
-                                   'sales': 'call_sales_api',
-                                   'documentation': 'call_documentation_api'
-                                   }.get(worker, 'none'),
-                        'stage': current_stage.value if hasattr(current_stage, 'value') else current_stage,
-                        'stage_name': stage_details.get('name', ''),
-                        'workflow_progress': user_master_agent.state.get(
-                            'workflow_progress', 0),
-                        'entities_collected': collected,
-                        'missing_fields': list(
-                            user_master_agent.state.get('missing_fields', [])),
-                        'missing_kyc_fields': list(
-                            user_master_agent.state.get('missing_kyc_fields', [])),
-                    }
-                    # Also run entity extraction on user input
-                    extracted = user_master_agent.extract_entities_from_text(user_input)
-                    if extracted:
-                        user_master_agent.update_entities(extracted)
-                        user_master_agent.recalculate_missing_fields()
-
-            except Exception as e:
-                print(f"[CHAT] LLM failed: {e} — using deterministic fallback")
-                db_session.failure_count += 1
-                response = None
-
-        # Always fall back to deterministic if LLM failed or disabled
-        if response is None:
-            # First extract entities from text safely
-            extracted = user_master_agent.extract_entities_from_text(user_input)
-            if extracted:
-                user_master_agent.update_entities(extracted)
-                user_master_agent.recalculate_missing_fields()
-            response = user_master_agent.handle(user_input)
+        # ── CORE AGENT LOGIC ──────────────────────────────────────────────
+        # All conversational and workflow logic is now handled internally by MasterAgent
+        extracted = user_master_agent.extract_entities_from_text(user_input)
+        if extracted:
+            user_master_agent.update_entities(extracted)
+            user_master_agent.recalculate_missing_fields()
+        
+        response = user_master_agent.handle(user_input)
 
         # Safety: response must always be a valid dict with message
         if not isinstance(response, dict):

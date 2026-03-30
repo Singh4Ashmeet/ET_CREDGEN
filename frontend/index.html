@@ -1,252 +1,360 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CredGen AI — Apply for a personal loan in minutes with our intelligent AI assistant.">
+    <meta name="description"
+        content="CredGen AI — Apply for a personal loan in minutes with our intelligent AI assistant.">
     <title>CredGen AI — Smart Loan Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="styles.css">
+    <script>
+        // Force Initial Theme to Dark First Concept (since we handle it globally anyway via OS/preferences, 
+        // but the system defaults to dark now unless overridden in localStorage)
+        const savedTheme = localStorage.getItem('credgen_theme');
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
 </head>
+
 <body>
 
-<!-- ════════════════════════════════════════════════════════════════════
+    <!-- ════════════════════════════════════════════════════════════════════
      SECTION 1 — LANDING PAGE
      ════════════════════════════════════════════════════════════════════ -->
-<div id="landing-page">
+    <div id="landing-page">
 
-    <!-- NAVBAR -->
-    <nav class="navbar" id="navbar">
-        <div class="nav-brand">
-            <span class="nav-logo">CG</span>
-            <span class="nav-title">CredGen</span>
-        </div>
-        <div class="nav-links">
-            <a href="/status" class="nav-link" id="nav-track">Track Application</a>
-            <a href="/admin/login" class="nav-link nav-link-outline" id="nav-admin">Admin Login</a>
-        </div>
-    </nav>
-
-    <!-- HERO -->
-    <section class="hero" id="hero-section">
-        <div class="hero-content">
-            <span class="hero-badge">AI-Powered • Instant Decisions</span>
-            <h1 class="hero-title">Get Your Loan<br><span class="hero-highlight">In Minutes</span></h1>
-            <p class="hero-subtitle">CredGen's AI assistant guides you through the entire loan process — from application to approval — in a single conversation.</p>
-            <div class="hero-actions">
-                <button class="btn-primary btn-glow" id="cta-apply" onclick="startApplication()">
-                    Apply for a Loan
-                    <span class="btn-arrow">→</span>
-                </button>
-                <button class="btn-secondary" id="cta-learn" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">
-                    How It Works
+        <!-- NAVBAR -->
+        <nav class="navbar" id="navbar">
+            <div class="nav-brand">
+                <div class="nav-logo">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                </div>
+                <span class="nav-title">CredGen</span>
+            </div>
+            <button class="menu-toggle" id="menu-toggle" onclick="toggleMenu()" aria-label="Toggle Menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="nav-links" id="nav-links">
+                <a href="/status" class="nav-link" id="nav-track">Track Application</a>
+                <a href="/admin/login" class="nav-link nav-link-outline" id="nav-admin">Admin Login</a>
+                <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle Theme">
+                    <i class="bi bi-moon-stars"></i>
                 </button>
             </div>
-        </div>
-        <div class="hero-visual">
-            <div class="hero-card">
-                <div class="hero-card-header">
-                    <div class="hero-avatar">CG</div>
-                    <span>CredGen AI</span>
+        </nav>
+
+        <!-- HERO -->
+        <section class="hero" id="hero-section">
+            <div class="hero-content">
+                <span class="hero-badge">AI-Powered • Instant Decisions</span>
+                <h1 class="hero-title">Get Your Loan<br><span class="hero-highlight">In Minutes</span></h1>
+                <p class="hero-subtitle">CredGen's AI assistant guides you through the entire loan process — from
+                    application to approval — in a single conversation.</p>
+                <div class="hero-actions">
+                    <button class="btn-primary btn-glow" id="cta-apply" onclick="startApplication()">
+                        Apply for a Loan
+                    </button>
+                    <button class="btn-secondary" id="cta-learn"
+                        onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">
+                        How It Works
+                    </button>
                 </div>
-                <div class="hero-card-body">
-                    <p class="typing-text">Hello! I'm CredGen, your AI loan assistant. Let's get you the best loan offer today...</p>
+            </div>
+            <div class="hero-visual">
+                <div class="hero-card">
+                    <div class="hero-card-header">
+                        <div class="hero-avatar">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <span>CredGen AI</span>
+                    </div>
+                    <div class="hero-card-body">
+                        <p class="typing-text">Hello! I'm CredGen, your AI loan assistant.</p>
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- HOW IT WORKS -->
-    <section class="section" id="how-it-works">
-        <h2 class="section-title">How It Works</h2>
-        <p class="section-subtitle">Four simple steps from application to approval</p>
-        <div class="steps-grid">
-            <div class="step-card">
-                <div class="step-number">01</div>
-                <div class="step-icon">💬</div>
-                <h3>Chat with AI</h3>
-                <p>Tell us about your loan needs in a natural conversation.</p>
-            </div>
-            <div class="step-card">
-                <div class="step-number">02</div>
-                <div class="step-icon">🔍</div>
-                <h3>Instant Verification</h3>
-                <p>We verify your KYC and check your eligibility in seconds.</p>
-            </div>
-            <div class="step-card">
-                <div class="step-number">03</div>
-                <div class="step-icon">💰</div>
-                <h3>Get Your Offer</h3>
-                <p>Receive a personalized loan offer with the best rates.</p>
-            </div>
-            <div class="step-card">
-                <div class="step-number">04</div>
-                <div class="step-icon">📄</div>
-                <h3>Download Letter</h3>
-                <p>Accept and download your sanction letter instantly.</p>
-            </div>
-        </div>
-    </section>
+        <!-- HOW IT WORKS -->
+        <section class="section" id="how-it-works">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-subtitle">Four simple steps from application to approval</p>
+            
+            <div class="steps-flow">
+                <!-- STEP 1 -->
+                <div class="step-row">
+                    <div class="step-visual">
+                        <div class="insight-card">
+                            <div class="insight-label">Step 01 </div>
+                            <div class="insight-title">Human-like Interaction</div>
+                            <p>Get answers to your specific questions in real-time, just like talking to a bank manager.</p>
+                        </div>
+                    </div>
+                    <div class="step-text">
+                        <h3><i class="bi bi-chat-left-dots"></i> Chat with AI</h3>
+                        <p>Begin your journey with a natural conversation. Our AI understands your needs and guides you through the process without complex forms.</p>
+                    </div>
+                </div>
 
-    <!-- STATS -->
-    <section class="stats-bar">
-        <div class="stat"><span class="stat-value">₹50Cr+</span><span class="stat-label">Loans Sanctioned</span></div>
-        <div class="stat"><span class="stat-value">10K+</span><span class="stat-label">Happy Customers</span></div>
-        <div class="stat"><span class="stat-value">< 5 min</span><span class="stat-label">Avg. Decision Time</span></div>
-        <div class="stat"><span class="stat-value">99.9%</span><span class="stat-label">Uptime</span></div>
-    </section>
-</div>
+                <!-- STEP 2 -->
+                <div class="step-row reverse">
+                    <div class="step-visual">
+                        <div class="insight-card">
+                            <div class="insight-label">Step 02 </div>
+                            <div class="insight-title">Bank-Grade Security</div>
+                            <p>Your documents are encrypted and processed through secure, automated channels.</p>
+                        </div>
+                    </div>
+                    <div class="step-text">
+                        <h3><i class="bi bi-shield-check"></i> Instant Verification</h3>
+                        <p>Submit your KYC documents directly in the chat. We use advanced OCR and automated checks to verify your identity in real-time.</p>
+                    </div>
+                </div>
 
-<!-- ════════════════════════════════════════════════════════════════════
+                <!-- STEP 3 -->
+                <div class="step-row">
+                    <div class="step-visual">
+                        <div class="insight-card">
+                            <div class="insight-label">Step 03 </div>
+                            <div class="insight-title">Customized Rates</div>
+                            <p>Our algorithms compare multiple parameters to find the most competitive rate for you.</p>
+                        </div>
+                    </div>
+                    <div class="step-text">
+                        <h3><i class="bi bi-cash-stack"></i> Get Your Offer</h3>
+                        <p>Our intelligent underwriting engine analyzes your profile instantly to present personalized loan offers with transparent terms.</p>
+                    </div>
+                </div>
+
+                <!-- STEP 4 -->
+                <div class="step-row reverse">
+                    <div class="step-visual">
+                        <div class="insight-card">
+                            <div class="insight-label">Step 04 </div>
+                            <div class="insight-title">Immediate Validity</div>
+                            <p>The digital letter is a legally binding document that speeds up your final disbursal.</p>
+                        </div>
+                    </div>
+                    <div class="step-text">
+                        <h3><i class="bi bi-file-earmark-pdf"></i> Download Letter</h3>
+                        <p>Accept your preferred offer and receive your digital sanction letter immediately. You're ready for disbursement in record time.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- FOOTER -->
+        <footer class="footer">
+            <div class="footer-container">
+                <div class="footer-socials">
+                    <a href="#" aria-label="Twitter"><i class="bi bi-twitter-x"></i></a>
+                    <a href="#" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                    <a href="#" aria-label="GitHub"><i class="bi bi-github"></i></a>
+                </div>
+                
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <a href="#">Contact Us</a>
+                        <a href="#">Developer API</a>
+                        <a href="#">EMI Calculator</a>
+                    </div>
+                </div>
+            </div>
+
+        </footer>
+
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════════
      SECTION 2 — CHAT APPLICATION
      ════════════════════════════════════════════════════════════════════ -->
-<div id="chat-app" class="chat-app hidden" style="display:none">
+    <div id="chat-app" class="chat-app hidden" style="display:none">
 
-    <!-- TOP BAR -->
-    <div class="chat-topbar">
-        <button class="btn-icon" id="btn-back" onclick="backToLanding()" title="Back to Home">
-            ← Back
-        </button>
-        <div class="topbar-center">
-            <span class="topbar-logo">CG</span>
-            <span class="topbar-title">CredGen AI</span>
-            <span class="topbar-status" id="topbar-status">Online</span>
-        </div>
-        <div class="topbar-actions">
-            <button class="btn-icon" id="btn-theme" onclick="toggleTheme()" title="Toggle Theme">🌙</button>
-        </div>
-    </div>
-
-    <!-- PROGRESS TRACKER -->
-    <div class="progress-tracker" id="progress-tracker">
-        <div class="tracker-step active" data-step="0">
-            <div class="step-circle">1</div>
-            <span class="step-label">Details</span>
-        </div>
-        <div class="tracker-line"></div>
-        <div class="tracker-step" data-step="1">
-            <div class="step-circle">2</div>
-            <span class="step-label">KYC</span>
-        </div>
-        <div class="tracker-line"></div>
-        <div class="tracker-step" data-step="2">
-            <div class="step-circle">3</div>
-            <span class="step-label">Verification</span>
-        </div>
-        <div class="tracker-line"></div>
-        <div class="tracker-step" data-step="3">
-            <div class="step-circle">4</div>
-            <span class="step-label">Underwriting</span>
-        </div>
-        <div class="tracker-line"></div>
-        <div class="tracker-step" data-step="4">
-            <div class="step-circle">5</div>
-            <span class="step-label">Offer</span>
-        </div>
-        <div class="tracker-line"></div>
-        <div class="tracker-step" data-step="5">
-            <div class="step-circle">6</div>
-            <span class="step-label">Done</span>
-        </div>
-    </div>
-
-    <!-- MAIN CHAT LAYOUT -->
-    <div class="chat-layout">
-
-        <!-- CHAT MESSAGES -->
-        <div class="chat-main">
-            <div class="messages-container" id="messages-container">
-                <!-- Messages rendered by JS -->
-            </div>
-
-            <!-- TYPING INDICATOR -->
-            <div class="typing-indicator hidden" id="typing-indicator">
-                <div class="typing-avatar">CG</div>
-                <div class="typing-dots">
-                    <span></span><span></span><span></span>
-                </div>
-            </div>
-
-            <!-- SUGGESTION CHIPS -->
-            <div class="chips-container hidden" id="chips-container">
-                <!-- Chips rendered by JS -->
-            </div>
-        </div>
-
-        <!-- CONTEXT PANEL (RIGHT) -->
-        <aside class="context-panel" id="context-panel">
-            <div class="panel-header">
-                <h3 id="panel-title">Application Progress</h3>
-            </div>
-            <div class="panel-body" id="panel-body">
-                <!-- Dynamic content filled by JS -->
-                <div class="panel-placeholder">
-                    <p>Your application details will appear here as we collect information.</p>
-                </div>
-            </div>
-        </aside>
-    </div>
-
-    <!-- INPUT AREA -->
-    <div class="input-area" id="input-area">
-        <div class="input-wrapper">
-            <button class="btn-icon attach-btn" id="btn-attach" title="Attach Document">📎</button>
-            <textarea id="user-input" class="user-input" placeholder="Type your message..." rows="1"
-                      maxlength="1000"></textarea>
-            <span class="char-counter" id="char-counter">0/1000</span>
-            <button class="btn-send" id="btn-send" onclick="sendMessage()" title="Send">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
+        <!-- TOP BAR -->
+        <div class="chat-topbar">
+            <button class="btn-icon" id="btn-back" onclick="backToLanding()" title="Back to Home">
+                <i class="bi bi-chevron-left"></i> Back
             </button>
+            <div class="topbar-center">
+                <div class="topbar-logo">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                </div>
+                <span class="topbar-title">CredGen AI</span>
+                <span class="topbar-status" id="topbar-status">Online</span>
+            </div>
+            <div class="topbar-actions">
+                <button class="btn-icon mobile-only" id="btn-context-toggle" onclick="toggleContextPanel()" title="Show Details">
+                    <i class="bi bi-info-circle"></i>
+                </button>
+                <button class="btn-icon" id="btn-theme" onclick="toggleTheme()" title="Toggle Theme">
+                    <i class="bi bi-moon-stars"></i>
+                </button>
+            </div>
         </div>
-        <div class="input-extras">
-            <button class="btn-text" id="btn-calc" onclick="toggleCalculator()">₹ Calculator</button>
-            <div class="input-hint hidden" id="input-hint"></div>
+
+        <!-- PROGRESS TRACKER -->
+        <div class="progress-tracker" id="progress-tracker">
+            <div class="tracker-step active" data-step="0">
+                <div class="step-circle">1</div>
+                <span class="step-label">Details</span>
+            </div>
+            <div class="tracker-line"></div>
+            <div class="tracker-step" data-step="1">
+                <div class="step-circle">2</div>
+                <span class="step-label">KYC</span>
+            </div>
+            <div class="tracker-line"></div>
+            <div class="tracker-step" data-step="2">
+                <div class="step-circle">3</div>
+                <span class="step-label">Verification</span>
+            </div>
+            <div class="tracker-line"></div>
+            <div class="tracker-step" data-step="3">
+                <div class="step-circle">4</div>
+                <span class="step-label">Underwriting</span>
+            </div>
+            <div class="tracker-line"></div>
+            <div class="tracker-step" data-step="4">
+                <div class="step-circle">5</div>
+                <span class="step-label">Offer</span>
+            </div>
+            <div class="tracker-line"></div>
+            <div class="tracker-step" data-step="5">
+                <div class="step-circle">6</div>
+                <span class="step-label">Done</span>
+            </div>
         </div>
+
+        <!-- MAIN CHAT LAYOUT -->
+        <div class="chat-layout">
+
+            <!-- CHAT MESSAGES -->
+            <div class="chat-main">
+                <div class="messages-container" id="messages-container">
+                    <!-- Messages rendered by JS -->
+                </div>
+
+                <!-- TYPING INDICATOR -->
+                <div class="typing-indicator hidden" id="typing-indicator">
+                    <div class="typing-avatar">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <div class="typing-dots">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+                <!-- SUGGESTION CHIPS -->
+                <div class="chips-container hidden" id="chips-container">
+                    <!-- Chips rendered by JS -->
+                </div>
+            </div>
+
+            <!-- CONTEXT PANEL (RIGHT) -->
+            <aside class="context-panel" id="context-panel">
+                <div class="panel-header">
+                    <h3 id="panel-title">Application Progress</h3>
+                </div>
+                <div class="panel-body" id="panel-body">
+                    <!-- Dynamic content filled by JS -->
+                    <div class="panel-placeholder">
+                        <p>Your application details will appear here as we collect information.</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- INPUT AREA -->
+        <div class="input-area" id="input-area">
+            <div class="input-wrapper">
+                <input type="file" id="file-input" class="hidden" multiple accept=".pdf,.png,.jpg,.jpeg">
+                <button class="btn-icon attach-btn" id="btn-attach"
+                    onclick="document.getElementById('file-input').click()" title="Attach Document">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <textarea id="user-input" class="user-input" placeholder="Type your message..." rows="1"
+                    maxlength="1000"></textarea>
+                <span class="char-counter" id="char-counter">0/1000</span>
+                <button class="btn-send" id="btn-send" onclick="sendMessage()" title="Send">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </div>
+            <div class="input-extras">
+                <button class="btn-text" id="btn-calc" onclick="toggleCalculator()">Calculator</button>
+                <div class="input-hint hidden" id="input-hint"></div>
+            </div>
+        </div>
+
+        <!-- EMI CALCULATOR (HIDDEN BY DEFAULT) -->
+        <div class="calculator-panel hidden" id="calculator-panel">
+            <div class="calc-header">
+                <h4>EMI Calculator</h4>
+                <button class="btn-icon" onclick="toggleCalculator()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="calc-body">
+                <div class="calc-field">
+                    <label>Loan Amount: ₹<span id="calc-amount-val">5,00,000</span></label>
+                    <input type="range" id="calc-amount" min="50000" max="5000000" step="10000" value="500000">
+                </div>
+                <div class="calc-field">
+                    <label>Interest Rate: <span id="calc-rate-val">12.0</span>%</label>
+                    <input type="range" id="calc-rate" min="8" max="24" step="0.5" value="12">
+                </div>
+                <div class="calc-field">
+                    <label>Tenure: <span id="calc-tenure-val">36</span> months</label>
+                    <input type="range" id="calc-tenure" min="12" max="60" step="6" value="36">
+                </div>
+                <div class="calc-result">
+                    <div class="calc-emi">
+                        <span>Monthly EMI</span>
+                        <strong id="calc-emi">₹0</strong>
+                    </div>
+                    <div class="calc-total">
+                        <span>Total Payable</span>
+                        <strong id="calc-total">₹0</strong>
+                    </div>
+                    <div class="calc-interest">
+                        <span>Total Interest</span>
+                        <strong id="calc-interest">₹0</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- EMI CALCULATOR (HIDDEN BY DEFAULT) -->
-    <div class="calculator-panel hidden" id="calculator-panel">
-        <div class="calc-header">
-            <h4>EMI Calculator</h4>
-            <button class="btn-icon" onclick="toggleCalculator()">✕</button>
-        </div>
-        <div class="calc-body">
-            <div class="calc-field">
-                <label>Loan Amount: ₹<span id="calc-amount-val">5,00,000</span></label>
-                <input type="range" id="calc-amount" min="50000" max="5000000" step="10000" value="500000">
-            </div>
-            <div class="calc-field">
-                <label>Interest Rate: <span id="calc-rate-val">12.0</span>%</label>
-                <input type="range" id="calc-rate" min="8" max="24" step="0.5" value="12">
-            </div>
-            <div class="calc-field">
-                <label>Tenure: <span id="calc-tenure-val">36</span> months</label>
-                <input type="range" id="calc-tenure" min="12" max="60" step="6" value="36">
-            </div>
-            <div class="calc-result">
-                <div class="calc-emi">
-                    <span>Monthly EMI</span>
-                    <strong id="calc-emi">₹0</strong>
-                </div>
-                <div class="calc-total">
-                    <span>Total Payable</span>
-                    <strong id="calc-total">₹0</strong>
-                </div>
-                <div class="calc-interest">
-                    <span>Total Interest</span>
-                    <strong id="calc-interest">₹0</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<script src="chat.js"></script>
+    <script>
+        function toggleMenu() {
+            const nav = document.getElementById('nav-links');
+            const icon = document.querySelector('.menu-toggle i');
+            nav.classList.toggle('active');
+            
+            if (nav.classList.contains('active')) {
+                icon.classList.remove('bi-list');
+                icon.classList.add('bi-x-lg');
+            } else {
+                icon.classList.remove('bi-x-lg');
+                icon.classList.add('bi-list');
+            }
+        }
+        
+        // Close menu when clicking link
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', () => {
+                const nav = document.getElementById('nav-links');
+                if (nav.classList.contains('active')) toggleMenu();
+            });
+        });
+    </script>
+    <script src="chat.js"></script>
 </body>
+
 </html>

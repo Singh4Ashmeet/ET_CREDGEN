@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from database import db
-from db_models import LoanApplication, Customer, KYCRecord, SanctionLetter
+from utils.database import db
+from models.db_models import LoanApplication, Customer, KYCRecord, SanctionLetter
 from sqlalchemy import desc
 
 status_bp = Blueprint('status', __name__)

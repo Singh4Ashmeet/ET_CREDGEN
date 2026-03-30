@@ -1,10 +1,16 @@
-from app import app
-from database import db
-from models import Customer, LoanApplication, ChatLog, TuningContent, ChatSession
-import csv
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app import create_app
+from utils.database import db
+from models.db_models import Customer, LoanApplication, ChatLog, TuningContent, ChatSession
+import csv
 import json
 from datetime import datetime
+
+# Initialize app
+app = create_app()
 
 def migrate():
     with app.app_context():
@@ -20,6 +26,7 @@ def migrate():
                 print("Migrating applications...")
                 with open(APPLICATIONS_CSV, mode='r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
+                    row_count = 0
                     for row in reader:
                         phone = row.get('phone')
                         if not phone: continue
@@ -54,7 +61,9 @@ def migrate():
                             application_date=app_date
                         )
                         db.session.add(application)
+                        row_count += 1
                 db.session.commit()
+                print(f"Successfully migrated {row_count} applications.")
                 os.rename(APPLICATIONS_CSV, APPLICATIONS_CSV + ".bak")
 
             # 2. Migrate Chat Logs
@@ -62,6 +71,7 @@ def migrate():
                 print("Migrating chat logs...")
                 with open(CHAT_LOGS_CSV, mode='r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
+                    row_count = 0
                     for row in reader:
                         session_id = row.get('session_id')
                         if not session_id: continue
@@ -73,17 +83,31 @@ def migrate():
                             db.session.add(session)
                             db.session.flush()
 
+                        details_raw = row.get('details', '{}')
+                        try:
+                             # Some CSVs escape JSON strings with extra quotes
+                            if details_raw.startswith('"') and details_raw.endswith('"'):
+                                details_raw = details_raw[1:-1].replace('""', '"')
+                            details = json.loads(details_raw)
+                        except:
+                            details = {}
+
                         log = ChatLog(
                             session_id=session_id,
                             event_type=row.get('event_type'),
                             message_role=row.get('message_role'),
                             message_text=row.get('message_text'),
                             status=row.get('status'),
-                            details=json.loads(row.get('details', '{}')),
+                            details=details,
                             created_at=datetime.fromisoformat(row.get('timestamp')) if row.get('timestamp') else datetime.utcnow()
                         )
                         db.session.add(log)
+                        row_count += 1
+                        if row_count % 50 == 0:
+                            print(f"Adding row {row_count}...")
+
                 db.session.commit()
+                print(f"Successfully migrated {row_count} chat logs.")
                 os.rename(CHAT_LOGS_CSV, CHAT_LOGS_CSV + ".bak")
 
             # 3. Migrate Tuning Content
@@ -91,15 +115,18 @@ def migrate():
                 print("Migrating tuning content...")
                 with open(TUNING_CSV, mode='r', encoding='utf-8') as f:
                     reader = csv.DictReader(f)
+                    row_count = 0
                     for row in reader:
                         content = TuningContent(
-                            type='policy', # Default to policy if not specified correctly in csv
+                            type='policy', # Default to policy
                             content=row.get('content', ''),
                             filename=row.get('filename'),
                             created_at=datetime.fromisoformat(row.get('timestamp')) if row.get('timestamp') else datetime.utcnow()
                         )
                         db.session.add(content)
+                        row_count += 1
                 db.session.commit()
+                print(f"Successfully migrated {row_count} tuning records.")
                 os.rename(TUNING_CSV, TUNING_CSV + ".bak")
 
             print("Migration completed successfully.")

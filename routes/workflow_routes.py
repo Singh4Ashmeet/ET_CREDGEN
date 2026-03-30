@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify, send_file
-from database import db
-from db_models import ChatSession, ProcessingJob, SanctionLetter, LoanOffer, LoanApplication
+from utils.database import db
+from models.db_models import (
+    Customer, LoanApplication, KYCRecord, FraudCheck, 
+    UnderwritingResult, LoanOffer, SanctionLetter, ChatSession, ProcessingJob
+)
 from agents.master_agent import MasterAgent, ConversationStage
 from utils.agent_factory import get_master_agent, get_underwriting_agent, get_fraud_agent, get_sales_agent
 from utils.pdf_generator import generate_sanction_letter as generate_sanction_pdf

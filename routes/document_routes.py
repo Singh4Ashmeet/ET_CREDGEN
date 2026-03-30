@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app, send_from_directory
 from werkzeug.utils import secure_filename
-from database import db
-from db_models import Document, ChatSession
+from utils.database import db
+from models.db_models import LoanApplication, SanctionLetter, Document, ChatSession
 import os
 import hashlib
 import uuid

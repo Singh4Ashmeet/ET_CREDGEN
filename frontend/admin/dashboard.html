@@ -1,13 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard — CredGen Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="admin.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script>
+        const savedTheme = localStorage.getItem('credgen_theme');
+        if (savedTheme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
 </head>
+
 <body class="dashboard-page">
     <!-- AUTH GUARD -->
     <script src="auth-guard.js"></script>
@@ -21,16 +30,19 @@
             </div>
             <nav class="sidebar-nav">
                 <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
-                    📊 Dashboard
+                    Dashboard
                 </button>
                 <button class="nav-item" data-tab="applications" onclick="switchTab('applications')">
-                    📋 Applications
+                    Applications
+                </button>
+                <button class="nav-item" data-tab="chatlogs" onclick="switchTab('chatlogs')">
+                    Chat Logs
                 </button>
                 <button class="nav-item" data-tab="tuning" onclick="switchTab('tuning')">
-                    🤖 AI Tuning
+                    AI Tuning
                 </button>
                 <button class="nav-item" data-tab="settings" onclick="switchTab('settings')">
-                    ⚙️ Settings
+                    Settings
                 </button>
             </nav>
             <div class="sidebar-footer">
@@ -50,10 +62,14 @@
 
                 <!-- KPI CARDS -->
                 <div class="kpi-grid" id="kpi-grid">
-                    <div class="kpi-card"><span class="kpi-value" id="kpi-total">—</span><span class="kpi-label">Total Applications</span></div>
-                    <div class="kpi-card accent"><span class="kpi-value" id="kpi-approved">—</span><span class="kpi-label">Approved Today</span></div>
-                    <div class="kpi-card danger"><span class="kpi-value" id="kpi-rejected">—</span><span class="kpi-label">Rejected Today</span></div>
-                    <div class="kpi-card"><span class="kpi-value" id="kpi-rate">—</span><span class="kpi-label">Approval Rate</span></div>
+                    <div class="kpi-card"><span class="kpi-value" id="kpi-total">—</span><span class="kpi-label">Total
+                            Applications</span></div>
+                    <div class="kpi-card accent"><span class="kpi-value" id="kpi-approved">—</span><span
+                            class="kpi-label">Approved Today</span></div>
+                    <div class="kpi-card danger"><span class="kpi-value" id="kpi-rejected">—</span><span
+                            class="kpi-label">Rejected Today</span></div>
+                    <div class="kpi-card"><span class="kpi-value" id="kpi-rate">—</span><span class="kpi-label">Approval
+                            Rate</span></div>
                 </div>
 
                 <!-- CHARTS -->
@@ -83,51 +99,161 @@
                             <option value="sanctioned">Sanctioned</option>
                             <option value="disbursed">Disbursed</option>
                         </select>
-                        <button class="btn-export" onclick="exportCSV()">📥 Export CSV</button>
+                        <button class="btn-export" onclick="exportCSV()">Export CSV</button>
                     </div>
                 </div>
                 <div class="table-container">
                     <table class="data-table" id="apps-table">
                         <thead>
-                            <tr><th>Customer</th><th>Amount</th><th>Status</th><th>Type</th><th>Date</th><th>Actions</th></tr>
+                            <tr>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Type</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
                         </thead>
                         <tbody id="apps-tbody"></tbody>
                     </table>
                 </div>
                 <div class="pagination" id="pagination"></div>
             </section>
+            
+            <!-- CHAT LOGS TAB -->
+            <section class="tab-content" id="tab-chatlogs">
+                <div class="tab-header">
+                    <h2>Chat Logs</h2>
+                    <p class="tab-subtitle">Review active and historical AI chat sessions</p>
+                </div>
 
+                <div class="table-container">
+                    <table class="data-table" id="chat-sessions-table">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>User</th>
+                                <th>Current Stage</th>
+                                <th>Messages</th>
+                                <th>Last Active</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chat-sessions-body">
+                            <!-- Sessions will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="chatlogs-pagination"></div>
+            </section>
+            
             <!-- AI TUNING TAB -->
             <section class="tab-content" id="tab-tuning">
-                <div class="tab-header"><h2>AI Tuning</h2></div>
-                <div class="tuning-form">
-                    <label>Bank Context / Policy Rules</label>
-                    <textarea id="tuning-content" rows="10" placeholder="Enter bank-specific policies, context, or tuning instructions..."></textarea>
-                    <button class="btn-primary" onclick="saveTuning()" style="margin-top:1rem">Save Context</button>
-                    <p class="tuning-msg hidden" id="tuning-msg"></p>
+                <div class="tab-header">
+                    <h2>AI Tuning</h2>
+                    <div id="tuning-status-badge" class="status-badge" style="background:var(--accent-light);color:var(--accent);border:none;font-size:11px">SYSTEM ACTIVE</div>
+                </div>
+                
+                <div class="tuning-container">
+                    <div class="tuning-editor-card">
+                        <div class="card-header">
+                            <h4>Bank Context & Policy Rules</h4>
+                            <p>This content is used as a prefix for all AI conversations to enforce bank policies.</p>
+                        </div>
+                        <textarea id="tuning-content" rows="12"
+                            placeholder="Enter bank-specific policies, context, or tuning instructions..."></textarea>
+                        <div class="card-footer">
+                            <button class="btn-primary" onclick="saveTuning()">Save Changes</button>
+                            <span id="tuning-msg" class="msg-hint hidden"></span>
+                        </div>
+                    </div>
+
+                    <div class="tuning-info-card">
+                        <h4>Best Practices</h4>
+                        <ul>
+                            <li><i class="bi bi-patch-check-fill"></i> Keep instructions concise and clear.</li>
+                            <li><i class="bi bi-patch-check-fill"></i> Define eligibility criteria explicitly.</li>
+                            <li><i class="bi bi-patch-check-fill"></i> Specify documentation requirements for different loan types.</li>
+                            <li><i class="bi bi-patch-check-fill"></i> Set the tone (e.g., professional, empathetic).</li>
+                        </ul>
+                    </div>
                 </div>
             </section>
 
             <!-- SETTINGS TAB -->
             <section class="tab-content" id="tab-settings">
-                <div class="tab-header"><h2>Settings</h2></div>
-                <div class="settings-form">
-                    <h3>Change Password</h3>
-                    <div class="form-group">
-                        <label>Current Password</label>
-                        <input type="password" id="old-password">
+                <div class="tab-header">
+                    <h2>Settings</h2>
+                </div>
+                
+                <div class="settings-grid">
+                    <!-- SECURITY -->
+                    <div class="settings-card">
+                        <div class="card-title">Security Settings</div>
+                        <div class="settings-form">
+                            <div class="form-group">
+                                <label>Current Password</label>
+                                <input type="password" id="old-password" placeholder="••••••••">
+                            </div>
+                            <div class="form-group">
+                                <label>New Password</label>
+                                <input type="password" id="new-password" placeholder="••••••••">
+                            </div>
+                            <button class="btn-primary btn-sm" onclick="changePassword()">Update Password</button>
+                            <p id="settings-msg" class="msg-hint hidden"></p>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>New Password</label>
-                        <input type="password" id="new-password">
+
+                    <!-- APPEARANCE -->
+                    <div class="settings-card">
+                        <div class="card-title">Appearance</div>
+                        <p class="settings-desc">Customize your dashboard experience.</p>
+                        <div class="theme-selector">
+                            <div class="theme-option" id="theme-dark" onclick="setAdminTheme('dark')">
+                                <div class="theme-preview dark"></div>
+                                <span>Dark Mode</span>
+                            </div>
+                            <div class="theme-option" id="theme-light" onclick="setAdminTheme('light')">
+                                <div class="theme-preview light"></div>
+                                <span>Light Mode</span>
+                            </div>
+                        </div>
                     </div>
-                    <button class="btn-primary" onclick="changePassword()">Update Password</button>
-                    <p class="settings-msg hidden" id="settings-msg"></p>
+
+                    <!-- SYSTEM INFO -->
+                    <div class="settings-card full-width">
+                        <div class="card-title">System Information</div>
+                        <div class="info-grid">
+                            <div class="info-item"><span class="label">Version</span><span class="value">v2.4.0-cloud</span></div>
+                            <div class="info-item"><span class="label">Environment</span><span class="value">Production</span></div>
+                            <div class="info-item"><span class="label">Architecture</span><span class="value">Cloud (Supabase)</span></div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
     </div>
 
+    <!-- CHAT LOG MODAL -->
+    <div class="modal-overlay hidden" id="log-modal">
+        <div class="modal-content log-viewer">
+            <div class="modal-header">
+                <h3>Chat Session Log</h3>
+                <button class="btn-close" onclick="closeLogModal()">×</button>
+            </div>
+            <div class="log-info-bar">
+                <span id="log-session-id"></span>
+                <span id="log-user-name"></span>
+            </div>
+            <div class="log-messages" id="log-messages-container">
+                <!-- Logs will be loaded here -->
+            </div>
+        </div>
+    </div>
+
     <script src="dashboard.js"></script>
+    <script src="logout.js"></script>
 </body>
+
 </html>

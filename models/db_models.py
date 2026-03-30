@@ -1,4 +1,4 @@
-from database import db
+from utils.database import db
 from datetime import datetime, timedelta
 import uuid
 import json

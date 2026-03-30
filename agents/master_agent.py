@@ -1,11 +1,12 @@
+import os
 import re
-import time
-import json
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from typing import Dict, List, Tuple, Optional, Set
+import torch
+from sentence_transformers import SentenceTransformer, util
+from typing import Dict, List, Tuple, Optional, Set, Any
 import logging
 from enum import Enum
+import time
 from datetime import datetime
 from utils.config import REQUIRED_FIELDS as CFG_REQUIRED_FIELDS, KYC_FIELDS as CFG_KYC_FIELDS, WORKFLOW_STAGES
 
@@ -156,21 +157,29 @@ class MasterAgent:
 
     KYC_PRIORITY = ['pan', 'aadhaar', 'address', 'pincode']
 
+    _shared_model = None
+    _shared_embeddings = None
+    _shared_intent_list = None
+
     def __init__(self, model_name='paraphrase-MiniLM-L6-v2'):
-        """Initialize master agent with AI model and empty state"""
+        """Initialize master agent with potentially shared AI model and fresh state"""
         self.state = self._initialize_state()
         self.conversation_history = []
         self.model_name = model_name
-
-        try:
-            self.intent_model = SentenceTransformer(model_name)
-            self._compute_embeddings()
-            logger.info(f"AI Master Agent initialized with {model_name}")
-        except Exception as e:
-            logger.error(f"Failed to load SentenceTransformer: {e}")
-            self.intent_model = None
-
         self.intent_cache = {}
+
+        # Use class-level singleton for models to save memory and time
+        if MasterAgent._shared_model is None:
+            try:
+                logger.info(f"Loading shared SentenceTransformer model: {model_name}")
+                MasterAgent._shared_model = SentenceTransformer(model_name)
+                # Compute embeddings once
+                self._compute_shared_embeddings()
+            except Exception as e:
+                logger.error(f"Failed to load shared SentenceTransformer: {e}")
+                MasterAgent._shared_model = None
+
+        self.intent_model = MasterAgent._shared_model
 
     def _initialize_state(self) -> Dict:
         """Create fresh state for new user session"""
@@ -203,13 +212,26 @@ class MasterAgent:
             "last_asked_at": None,
         }
 
-    def _compute_embeddings(self):
-        """Pre-compute and store average embeddings for all intent templates."""
-        self.intent_embeddings = {}
+    def _compute_shared_embeddings(self):
+        """Pre-compute and store shared embeddings for all intent templates."""
+        logger.info("Computing shared intent embeddings...")
+        intent_list = []
+        embeddings_list = []
+
         for intent, templates in self.INTENT_TEMPLATES.items():
             embeddings = self.intent_model.encode(templates, convert_to_numpy=True)
             mean_embedding = np.mean(embeddings, axis=0)
-            self.intent_embeddings[intent] = mean_embedding / np.linalg.norm(mean_embedding)
+            norm_embedding = mean_embedding / np.linalg.norm(mean_embedding)
+            
+            for _ in range(len(templates)): # Optional: or just one per intent
+                pass # We only need one per intent for current logic
+            
+            intent_list.append(intent)
+            embeddings_list.append(norm_embedding)
+
+        import torch
+        MasterAgent._shared_intent_list = intent_list
+        MasterAgent._shared_embeddings = torch.tensor(np.array(embeddings_list))
 
     # -------------------------------------------------------------------
     # DETERMINISTIC REGEX ENTITY EXTRACTION (supplements LLM extraction)
@@ -221,11 +243,47 @@ class MasterAgent:
             if v is not None:
                 self.state['entities'][k] = v
 
+    def calculate_missing_fields(self) -> Tuple[Set[str], Set[str]]:
+        """Calculate basic and KYC missing fields based on current state."""
+        REQUIRED_BASIC = ['loan_amount', 'tenure', 'age', 'income',
+                          'name', 'employment_type', 'purpose']
+        REQUIRED_KYC   = ['pan', 'aadhaar', 'address', 'pincode']
+
+        # Ensure purpose is present if loan_type is set
+        entities = self.state['entities']
+        if entities.get('loan_type') and not entities.get('purpose'):
+            entities['purpose'] = entities['loan_type']
+
+        def is_present(field):
+            val = self.state['entities'].get(field)
+            if val is None: return False
+            if isinstance(val, str) and val.strip() == '': return False
+            if isinstance(val, (int, float)) and val == 0: return False
+            return True
+
+        missing_basic = set(f for f in REQUIRED_BASIC if not is_present(f))
+        missing_kyc = set(f for f in REQUIRED_KYC if not is_present(f))
+
+        # Email is optional — remove from missing if skipped
+        if self.state['entities'].get('email_skipped'):
+            missing_basic.discard('email')
+
+        return missing_basic, missing_kyc
+
     def recalculate_missing_fields(self):
-        """Recalculate missing missing tracking based on current state."""
+        """Update state with current missing fields."""
         missing_basic, missing_kyc = self.calculate_missing_fields()
         self.state["missing_fields"] = missing_basic
         self.state["missing_kyc_fields"] = missing_kyc
+
+        # Auto-advance if all required fields now present
+        stage = self.state['stage']
+        if (stage == ConversationStage.COLLECTING_DETAILS
+                and not self.state['missing_fields']):
+            self.transition_stage(ConversationStage.KYC_COLLECTION)
+        elif (stage == ConversationStage.KYC_COLLECTION
+                and not self.state['missing_kyc_fields']):
+            self.transition_stage(ConversationStage.FRAUD_CHECK)
 
     def extract_entities_from_text(self, text: str) -> dict:
         import re
@@ -338,40 +396,6 @@ class MasterAgent:
     # MISSING FIELDS
     # -------------------------------------------------------------------
 
-    def recalculate_missing_fields(self):
-        REQUIRED_BASIC = ['loan_amount', 'tenure', 'age', 'income',
-                          'name', 'employment_type', 'purpose']
-        REQUIRED_KYC   = ['pan', 'aadhaar', 'address', 'pincode']
-
-        # Fix 4 — Purpose already known
-        entities = self.state['entities']
-        if entities.get('loan_type') and not entities.get('purpose'):
-            entities['purpose'] = entities['loan_type']
-
-        def is_present(field):
-            val = self.state['entities'].get(field)
-            if val is None: return False
-            if isinstance(val, str) and val.strip() == '': return False
-            if isinstance(val, (int, float)) and val == 0: return False
-            return True
-
-        self.state['missing_fields'] = set(
-            f for f in REQUIRED_BASIC if not is_present(f))
-        self.state['missing_kyc_fields'] = set(
-            f for f in REQUIRED_KYC if not is_present(f))
-
-        # Email is optional — remove from missing if skipped
-        if self.state['entities'].get('email_skipped'):
-            self.state['missing_fields'].discard('email')
-
-        # Auto-advance if all required fields now present
-        stage = self.state['stage']
-        if (stage == ConversationStage.COLLECTING_DETAILS
-                and not self.state['missing_fields']):
-            self.transition_stage(ConversationStage.KYC_COLLECTION)
-        elif (stage == ConversationStage.KYC_COLLECTION
-                and not self.state['missing_kyc_fields']):
-            self.transition_stage(ConversationStage.FRAUD_CHECK)
 
     FIELD_QUESTIONS = {
         'loan_amount': (
@@ -509,42 +533,34 @@ class MasterAgent:
         if cache_key in self.intent_cache:
             return self.intent_cache[cache_key]
 
-        clean = clean_text(text)
+        if not text:
+            return IntentType.UNCLEAR, 0.0
 
-        # 1. Check patterns FIRST (fast path)
-        pattern_result = self._pattern_based_intent(text)
-        if pattern_result:
-            self.intent_cache[cache_key] = pattern_result
-            return pattern_result
+        # Check for exact pattern matches first (high priority)
+        keyword_intent = self._rule_based_intent_detection(text)
+        if keyword_intent != IntentType.UNCLEAR:
+            self.intent_cache[cache_key] = (keyword_intent, 0.95)
+            return keyword_intent, 0.95
 
-        # 2. AI model
-        if not self.intent_model:
-            logger.warning("AI model not available, using rule-based intent detection")
-            return self._rule_based_intent_detection(text), 0.6
+        # Semantic similarity using shared model
+        if not self.intent_model or MasterAgent._shared_embeddings is None:
+            # Fallback to rule-based logic if model isn't available
+            return self._rule_based_intent_detection(text), 0.5
 
         try:
-            user_embedding = self.intent_model.encode(clean)
-            user_embedding_norm = user_embedding / np.linalg.norm(user_embedding)
-
-            similarities = {}
-            for intent, template_embedding in self.intent_embeddings.items():
-                similarity = np.dot(user_embedding_norm, template_embedding)
-                similarities[intent] = similarity
-
-            boosted_similarities = self._apply_context_boosting(similarities)
-            best_intent = max(boosted_similarities, key=boosted_similarities.get)
-            confidence = boosted_similarities[best_intent]
-
-            validated_intent, validated_confidence = self._validate_intent_with_rules(
-                text, best_intent, confidence
-            )
-
-            self.intent_cache[cache_key] = (validated_intent, validated_confidence)
-            return validated_intent, validated_confidence
-
+            query_embedding = self.intent_model.encode(text, convert_to_tensor=True)
+            cos_scores = util.cos_sim(query_embedding, MasterAgent._shared_embeddings)[0]
+            
+            top_idx = int(torch.argmax(cos_scores))
+            confidence = float(cos_scores[top_idx])
+            intent = MasterAgent._shared_intent_list[top_idx]
+            
+            result = (intent, confidence)
+            self.intent_cache[cache_key] = result
+            return result
         except Exception as e:
-            logger.error(f"Error in AI intent detection: {e}")
-            return self._rule_based_intent_detection(text), 0.5
+            logger.error(f"Intent detection error: {e}")
+            return IntentType.UNCLEAR, 0.0
 
     def _apply_context_boosting(self, similarities: Dict[IntentType, float]) -> Dict[IntentType, float]:
         """Apply context-aware boosting to intent similarities."""
@@ -854,11 +870,11 @@ class MasterAgent:
             }
 
         nq = self.get_next_question()
-        if nq:
+        if nq and nq[0]:
             return {
-                "message": f"To proceed, {nq['prompt']}",
+                "message": f"To proceed, {nq[0]}",
                 "terminate": False,
-                "missing_field": nq['field']
+                "missing_field": nq[1]
             }
 
         return {
@@ -996,6 +1012,8 @@ class MasterAgent:
         Returns a short acknowledgement of what was just collected.
         e.g. "Got it! " or "Thanks, Ashmeet. " or "₹7,00,000 — noted. "
         """
+    def _get_acknowledgment(self, just_extracted: Dict) -> str:
+        """Helper to create a response prefix based on extracted entities."""
         if not just_extracted:
             return ''
 
@@ -1240,102 +1258,90 @@ class MasterAgent:
 
         self.conversation_history.append({"user": user_input, "timestamp": time.time()})
 
-        # ── FIRST MESSAGE / GREETING HANDLER ──────────────────────
-        entities = self.state['entities']
-        has_any_entity = any(v for v in entities.values() if v)
+        # 1. Intent Detection
+        intent, conf = self.detect_intent(text)
 
-        if not has_any_entity:
-            type_map = {
-                'personal': ['personal', 'cash', 'emergency', 'medical',
-                             'wedding', 'travel'],
-                'home':     ['home', 'house', 'property', 'flat', 'plot',
-                             'ghar', 'makaan'],
-                'vehicle':  ['car', 'vehicle', 'bike', 'scooter', 'gaadi'],
-                'education':['education', 'study', 'college', 'fees',
-                             'course', 'school'],
-                'business': ['business', 'shop', 'startup', 'capital',
-                             'expand'],
-            }
-            detected_type = None
-            for ltype, keywords in type_map.items():
-                if any(kw in lower for kw in keywords):
-                    detected_type = ltype
-                    break
-
-            if detected_type:
-                self.state['entities']['loan_type'] = detected_type
-                self.state['entities']['purpose'] = detected_type
-                self.state['last_asked_field'] = 'loan_amount'
-                type_labels = {
-                    'personal': 'personal loan',
-                    'home':     'home loan',
-                    'vehicle':  'vehicle loan',
-                    'education':'education loan',
-                    'business': 'business loan',
-                }
-                return self._build_response(
-                    f"Great choice! A {type_labels[detected_type]} it is. 😊\n\n"
-                    f"How much are you looking to borrow?",
-                    suggestions=['₹1 lakh', '₹3 lakh',
-                                 '₹5 lakh', '₹10 lakh']
-                )
-            else:
-                self.state['last_asked_field'] = 'purpose'
-                return self._build_response(
-                    "Hi there! 👋 I'm CredGen AI, your loan assistant.\n\n"
-                    "I can help you get a personal loan, home loan, "
-                    "business loan, or more — quickly and digitally.\n\n"
-                    "What kind of loan are you looking for?",
-                    suggestions=['Personal loan', 'Home loan',
-                                 'Business loan', 'Education loan',
-                                 'Vehicle loan']
-                )
-
-        # ── STEP 1: Context-first extraction ──────────────────────────
+        # 2. Extract Entities Immediately (Catch details even in the first message)
+        # Context-first extraction (if we just asked a question)
         context_entities = self.extract_from_context(text)
         if context_entities:
-            print(f"[MASTER] Context extraction: {context_entities}")
             self.update_entities(context_entities)
 
-        # ── STEP 2: Regex extraction (supplement, not replace) ─────────
-        regex_entities = self.extract_entities_from_text(text)
-        for k, v in regex_entities.items():
-            if k not in context_entities and v:
+        # Regex/NLP extraction
+        extracted_entities = self.extract_entities_from_text(text)
+        for k, v in extracted_entities.items():
+            # Apply if not already found by context or if context didn't find anything
+            if v and (k not in context_entities or not context_entities[k]):
                 self.update_entities({k: v})
 
-        # Handle "skip" for optional fields
-        if (text.lower() in ('skip', 'no', 'nahi', 'later', 'ignore')
-                and self.state.get('last_asked_field') == 'email'):
-            self.state['entities']['email_skipped'] = True
+        # Special handling for loan type in free text (for greeting bypass)
+        type_map = {
+            'personal': ['personal', 'cash', 'emergency', 'medical', 'wedding', 'travel'],
+            'home':     ['home', 'house', 'property', 'flat', 'plot', 'ghar', 'makaan'],
+            'vehicle':  ['car', 'vehicle', 'bike', 'scooter', 'gaadi'],
+            'education':['education', 'study', 'college', 'fees', 'course', 'school'],
+            'business': ['business', 'shop', 'startup', 'capital', 'expand'],
+        }
+        detected_type = None
+        for ltype, keywords in type_map.items():
+            if any(kw in lower for kw in keywords):
+                detected_type = ltype
+                break
+        
+        if detected_type and not self.state['entities'].get('purpose'):
+            self.state['entities']['purpose'] = detected_type
 
-        # ── STEP 3: Recalculate missing fields ─────────────────────────
+        # 3. Recalculate State
         self.recalculate_missing_fields()
+        current_stage = self.state['stage']
+        entities = self.state['entities']
+        has_essential_entities = any(v for k, v in entities.items() if v and k in REQUIRED_FIELDS)
 
-        # ── STEP 4: Handle stage and route ──────────────────────────────        # ── STEP 5: Check stage and route ──────────────────────────────
-        stage = self.state['stage']
+        # ── INITIAL GREETING BYPASS ──────────────────────────────────────
+        # If we are in GREETING but the user provides info, move to COLLECTING_DETAILS
+        if current_stage == ConversationStage.GREETING:
+            if has_essential_entities or detected_type:
+                self.transition_stage(ConversationStage.COLLECTING_DETAILS)
+                current_stage = ConversationStage.COLLECTING_DETAILS
+            elif (intent == IntentType.GREETING and conf > 0.6) or not entities.get('purpose'):
+                # Regular greeting flow
+                self.state['last_asked_field'] = 'purpose'
+                self.transition_stage(ConversationStage.COLLECTING_DETAILS)
+                return self._build_response(
+                    "Hi there! 👋 I'm CredGen AI, your loan assistant.\n\n"
+                    "I can help you get a loan tailored to your needs — quickly and digitally.\n\n"
+                    "What kind of loan are you looking for today?",
+                    suggestions=['Personal loan', 'Home loan', 'Business loan', 'Vehicle loan']
+                )
 
-        if stage == ConversationStage.COLLECTING_DETAILS:
+        # 4. Handle Specialized Intents (Help, Rates, etc.)
+        intent_prefix = ""
+        if intent in (IntentType.HELP_GENERAL, IntentType.RATE_INQUIRY) and conf > 0.6:
+            resp = self.generate_response(intent, conf)
+            intent_prefix = resp['message'] + "\n\n"
+        elif intent == IntentType.EXIT and conf > 0.7:
+            return self._build_response("Goodbye! Feel free to return when you're ready.")
+
+        # 5. Handle Stage Workflow
+        if current_stage == ConversationStage.COLLECTING_DETAILS:
             if not self.state.get('missing_fields'):
                 self.transition_stage(ConversationStage.KYC_COLLECTION)
                 question, _ = self.get_next_question()
-                entities = self.state['entities']
                 return self._build_response(
-                    f"Great, {entities.get('name', 'there')}! "
-                    f"I have all your basic details. "
-                    f"Now I need to verify your identity (KYC). "
+                    f"{intent_prefix}Great! I have all your basic details. "
+                    "Next, I need to collect some KYC documents for verification.\n\n"
                     f"{question}",
-                    suggestions=[]
+                    suggestions=self._get_field_suggestions(self.state.get('last_asked_field'))
                 )
             else:
                 question, field = self.get_next_question()
-                if question:
-                    ack = self._build_acknowledgement(context_entities)
-                    return self._build_response(
-                        f"{ack}{question}",
-                        suggestions=self._get_field_suggestions(field)
-                    )
+                ack = self._get_acknowledgment(extracted_entities or context_entities)
+                return self._build_response(
+                    f"{intent_prefix}{ack}{question}",
+                    suggestions=self._get_field_suggestions(field)
+                )
 
-        elif stage == ConversationStage.KYC_COLLECTION:
+        elif current_stage == ConversationStage.KYC_COLLECTION:
             if not self.state.get('missing_kyc_fields'):
                 self.transition_stage(ConversationStage.FRAUD_CHECK)
                 return self._build_response(
@@ -1348,27 +1354,27 @@ class MasterAgent:
             else:
                 question, field = self.get_next_question()
                 if question:
-                    ack = self._build_acknowledgement(context_entities)
+                    ack = self._get_acknowledgment(context_entities)
                     return self._build_response(
                         f"{ack}{question}",
                         suggestions=self._get_field_suggestions(field)
                     )
 
-        elif stage == ConversationStage.FRAUD_CHECK:
+        elif current_stage == ConversationStage.FRAUD_CHECK:
             return self._build_response(
                 "Security verification is in progress...",
                 worker='fraud',
                 action='call_fraud_api'
             )
 
-        elif stage == ConversationStage.UNDERWRITING:
+        elif current_stage == ConversationStage.UNDERWRITING:
             return self._build_response(
                 "Assessing your application...",
                 worker='underwriting',
                 action='call_underwriting_api'
             )
 
-        elif stage == ConversationStage.OFFER_PRESENTATION:
+        elif current_stage == ConversationStage.OFFER_PRESENTATION:
             accept_words = ['yes', 'accept', 'ok', 'okay', 'agree',
                             'proceed', 'confirm', 'haan', 'theek']
             negotiate_words = ['negotiate', 'lower', 'reduce', 'better',
@@ -1394,23 +1400,26 @@ class MasterAgent:
                                  'Explain the terms']
                 )
 
-        elif stage == ConversationStage.DOCUMENTATION:
+        elif current_stage == ConversationStage.DOCUMENTATION:
             return self._build_response(
                 "Generating your sanction letter...",
                 worker='documentation',
                 action='call_documentation_api'
             )
 
-        elif stage == ConversationStage.CLOSED:
+        elif current_stage == ConversationStage.CLOSED:
             return self._build_response(
                 "Your loan has been sanctioned! "
                 "Download your letter using the button on the right.",
                 suggestions=['Start a new application']
             )
 
-        question, _ = self.get_next_question()
+        question, field = self.get_next_question()
+        if question:
+            return self._build_response(question, suggestions=self._get_field_suggestions(field))
+            
         return self._build_response(
-            question or "How can I help you today?")
+            "I'm here to help with your application. To proceed, I need to know a bit more about your loan needs. Shall we continue?")
 
     def get_workflow_status(self) -> Dict:
         """Get current workflow status."""

@@ -14,10 +14,7 @@ class AgentManager:
 
     @classmethod
     def get_master_agent(cls):
-        if cls._master_agent is None:
-            logger.info("Initializing MasterAgent singleton (loading models)...")
-            cls._master_agent = MasterAgent()
-        return cls._master_agent
+        return MasterAgent()
 
     @classmethod
     def get_underwriting_agent(cls):

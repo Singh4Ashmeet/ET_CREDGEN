@@ -1,8 +1,8 @@
 from flask import request
 import uuid
 from datetime import datetime
-from database import db
-from db_models import ChatSession, ChatLog, TuningContent
+from utils.database import db
+from models.db_models import ChatSession, ChatLog, LoanApplication, Customer, TuningContent
 from agents.master_agent import MasterAgent, IntentType, ConversationStage
 import logging
 from enum import Enum
@@ -47,7 +47,7 @@ def initialize_user_session(session_id):
         session = ChatSession(
             session_id=session_id,
             state={},
-            stage=ConversationStage.COLLECTING_DETAILS.value  # Use enum value (lowercase)
+            stage=ConversationStage.GREETING.value  # Start at GREETING, not COLLECTING_DETAILS
         )
         # We need a MasterAgent instance to get initial state
         temp_agent = MasterAgent()
