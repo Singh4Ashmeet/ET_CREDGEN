@@ -133,3 +133,47 @@ def download_document(document_id):
     if doc:
          return send_from_directory(current_app.config['UPLOAD_FOLDER'], doc.file_path, as_attachment=True)
     return jsonify({'error': 'Not found'}), 404
+
+#......extract profile endpoint.........
+@document_bp.route('/extract-profile', methods=['POST'])
+def extract_profile_from_docs():
+    try:
+        from utils.extract import extract_profile
+
+        session_id = request.headers.get('X-Session-ID')
+        if not session_id:
+            return jsonify({'error': 'No session ID'}), 400
+
+        # Get all documents for this session from DB
+        session = ChatSession.query.get(session_id)
+        if not session:
+            return jsonify({'error': 'Invalid session'}), 400
+
+        docs = Document.query.filter_by(application_id=session.application_id).all()
+        if not docs:
+            return jsonify({'error': 'No documents found for this session'}), 400
+
+        # Build full file paths
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        pdf_paths = [
+            os.path.join(upload_folder, doc.file_path)
+            for doc in docs
+            if os.path.exists(os.path.join(upload_folder, doc.file_path))
+        ]
+
+        if not pdf_paths:
+            return jsonify({'error': 'No files found on disk'}), 400
+
+        # Run extractor
+        profile, missing = extract_profile(pdf_paths)
+
+        return jsonify({
+            'status': 'success',
+            'profile': profile,
+            'missing_fields': missing
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
